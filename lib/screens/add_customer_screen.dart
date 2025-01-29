@@ -19,13 +19,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _nameController = TextEditingController();
   final _contactController = TextEditingController();
   PlanType _selectedPlan = PlanType.monthly;
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Customer'),
-      ),
+      appBar: AppBar(title: const Text('Add Customer')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -65,12 +63,13 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 labelText: 'Plan',
                 border: OutlineInputBorder(),
               ),
-              items: PlanType.values.map((plan) {
-                return DropdownMenuItem(
-                  value: plan,
-                  child: Text(plan.name),
-                );
-              }).toList(),
+              items:
+                  PlanType.values.map((plan) {
+                    return DropdownMenuItem(
+                      value: plan,
+                      child: Text(plan.name),
+                    );
+                  }).toList(),
               onChanged: (PlanType? value) {
                 if (value != null) {
                   setState(() {
@@ -93,6 +92,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   void _saveCustomer() async {
     if (_formKey.currentState?.validate() ?? false) {
       final customer = Customer(
+        wifiName: '',
         name: _nameController.text,
         contact: _contactController.text,
         isActive: true,
@@ -109,12 +109,13 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             const SnackBar(content: Text('Customer saved successfully')),
           );
           Navigator.pop(context);
+          ref.invalidate(activeCustomersProvider);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error saving customer: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error saving customer: $e')));
         }
       }
     }

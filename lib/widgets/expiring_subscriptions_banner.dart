@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:myapp/providers/subscription_provider.dart';
+
+import '../providers/subscription_provider.dart';
+
 
 class ExpiringSubscriptionsBanner extends ConsumerWidget {
   const ExpiringSubscriptionsBanner({super.key});

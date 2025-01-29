@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:myapp/services/receipt_service.dart';
 
 import '../database/models/payment.dart';
 import '../providers/customer_provider.dart';
+import '../services/receipt_service.dart';
 
 class ReceiptButton extends ConsumerWidget {
   final Payment payment;

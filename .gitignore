@@ -32,7 +32,10 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
-
+*.g.dart
+/lib/database/models/payment.g.dart
+database/models/customer.g.dart
+/lib/database/models/customer.g.dart
 # Symbolication related
 app.*.symbols
 

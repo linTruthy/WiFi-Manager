@@ -13,17 +13,16 @@ class CustomersScreen extends ConsumerWidget {
     final customersAsync = ref.watch(activeCustomersProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Active Customers'),
-      ),
+      appBar: AppBar(title: const Text('Active Customers')),
       body: customersAsync.when(
-        data: (customers) => ListView.builder(
-          itemCount: customers.length,
-          itemBuilder: (context, index) {
-            final customer = customers[index];
-            return CustomerListTile(customer: customer);
-          },
-        ),
+        data:
+            (customers) => ListView.builder(
+              itemCount: customers.length,
+              itemBuilder: (context, index) {
+                final customer = customers[index];
+                return CustomerListTile(customer: customer);
+              },
+            ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text('Error: $error')),
       ),
@@ -34,25 +33,30 @@ class CustomersScreen extends ConsumerWidget {
 class CustomerListTile extends ConsumerWidget {
   final Customer customer;
 
-  const CustomerListTile({
-    super.key,
-    required this.customer,
-  });
+  const CustomerListTile({super.key, required this.customer});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
+      onTap:
+          () => Navigator.pushNamed(
+            context,
+            '/customer/${customer.id}',
+            arguments: customer,
+          ),
       title: Text(customer.name),
       subtitle: Text(
         'Expires: ${DateFormat('MMM dd, yyyy').format(customer.subscriptionEnd)}',
       ),
       trailing: IconButton(
         icon: const Icon(Icons.edit),
-        onPressed: () => Navigator.pushNamed(
-          context,
-          '/edit-customer',
-          arguments: customer,
-        ),
+        onPressed:
+            () => Navigator.pushNamed(
+              context,
+
+              '/edit-customer/${customer.id}',
+              arguments: customer,
+            ),
       ),
     );
   }

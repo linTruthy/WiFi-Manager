@@ -52,6 +52,11 @@ const CustomerSchema = CollectionSchema(
       id: 6,
       name: r'subscriptionStart',
       type: IsarType.dateTime,
+    ),
+    r'wifiName': PropertySchema(
+      id: 7,
+      name: r'wifiName',
+      type: IsarType.string,
     )
   },
   estimateSize: _customerEstimateSize,
@@ -68,6 +73,19 @@ const CustomerSchema = CollectionSchema(
       properties: [
         IndexPropertySchema(
           name: r'name',
+          type: IndexType.value,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'wifiName': IndexSchema(
+      id: -6937365767021505800,
+      name: r'wifiName',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'wifiName',
           type: IndexType.value,
           caseSensitive: true,
         )
@@ -92,6 +110,7 @@ int _customerEstimateSize(
   bytesCount += 3 + object.currentPassword.length * 3;
   bytesCount += 3 + object.name.length * 3;
   bytesCount += 3 + object.planType.name.length * 3;
+  bytesCount += 3 + object.wifiName.length * 3;
   return bytesCount;
 }
 
@@ -108,6 +127,7 @@ void _customerSerialize(
   writer.writeString(offsets[4], object.planType.name);
   writer.writeDateTime(offsets[5], object.subscriptionEnd);
   writer.writeDateTime(offsets[6], object.subscriptionStart);
+  writer.writeString(offsets[7], object.wifiName);
 }
 
 Customer _customerDeserialize(
@@ -126,6 +146,7 @@ Customer _customerDeserialize(
             PlanType.daily,
     subscriptionEnd: reader.readDateTime(offsets[5]),
     subscriptionStart: reader.readDateTime(offsets[6]),
+    wifiName: reader.readString(offsets[7]),
   );
   object.id = id;
   return object;
@@ -153,6 +174,8 @@ P _customerDeserializeProp<P>(
       return (reader.readDateTime(offset)) as P;
     case 6:
       return (reader.readDateTime(offset)) as P;
+    case 7:
+      return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -192,6 +215,14 @@ extension CustomerQueryWhereSort on QueryBuilder<Customer, Customer, QWhere> {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'name'),
+      );
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhere> anyWifiName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'wifiName'),
       );
     });
   }
@@ -392,6 +423,142 @@ extension CustomerQueryWhere on QueryBuilder<Customer, Customer, QWhereClause> {
             ))
             .addWhereClause(IndexWhereClause.lessThan(
               indexName: r'name',
+              upper: [''],
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameEqualTo(
+      String wifiName) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'wifiName',
+        value: [wifiName],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameNotEqualTo(
+      String wifiName) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'wifiName',
+              lower: [],
+              upper: [wifiName],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'wifiName',
+              lower: [wifiName],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'wifiName',
+              lower: [wifiName],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'wifiName',
+              lower: [],
+              upper: [wifiName],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameGreaterThan(
+    String wifiName, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'wifiName',
+        lower: [wifiName],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameLessThan(
+    String wifiName, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'wifiName',
+        lower: [],
+        upper: [wifiName],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameBetween(
+    String lowerWifiName,
+    String upperWifiName, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'wifiName',
+        lower: [lowerWifiName],
+        includeLower: includeLower,
+        upper: [upperWifiName],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameStartsWith(
+      String WifiNamePrefix) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'wifiName',
+        lower: [WifiNamePrefix],
+        upper: ['$WifiNamePrefix\u{FFFFF}'],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'wifiName',
+        value: [''],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> wifiNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.lessThan(
+              indexName: r'wifiName',
+              upper: [''],
+            ))
+            .addWhereClause(IndexWhereClause.greaterThan(
+              indexName: r'wifiName',
+              lower: [''],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.greaterThan(
+              indexName: r'wifiName',
+              lower: [''],
+            ))
+            .addWhereClause(IndexWhereClause.lessThan(
+              indexName: r'wifiName',
               upper: [''],
             ));
       }
@@ -1100,6 +1267,136 @@ extension CustomerQueryFilter
       ));
     });
   }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'wifiName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'wifiName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'wifiName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'wifiName',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'wifiName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'wifiName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'wifiName',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'wifiName',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'wifiName',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> wifiNameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'wifiName',
+        value: '',
+      ));
+    });
+  }
 }
 
 extension CustomerQueryObject
@@ -1190,6 +1487,18 @@ extension CustomerQuerySortBy on QueryBuilder<Customer, Customer, QSortBy> {
   QueryBuilder<Customer, Customer, QAfterSortBy> sortBySubscriptionStartDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'subscriptionStart', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByWifiName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'wifiName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByWifiNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'wifiName', Sort.desc);
     });
   }
 }
@@ -1291,6 +1600,18 @@ extension CustomerQuerySortThenBy
       return query.addSortBy(r'subscriptionStart', Sort.desc);
     });
   }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByWifiName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'wifiName', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByWifiNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'wifiName', Sort.desc);
+    });
+  }
 }
 
 extension CustomerQueryWhereDistinct
@@ -1339,6 +1660,13 @@ extension CustomerQueryWhereDistinct
   QueryBuilder<Customer, Customer, QDistinct> distinctBySubscriptionStart() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'subscriptionStart');
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QDistinct> distinctByWifiName(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'wifiName', caseSensitive: caseSensitive);
     });
   }
 }
@@ -1391,6 +1719,12 @@ extension CustomerQueryProperty
       subscriptionStartProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'subscriptionStart');
+    });
+  }
+
+  QueryBuilder<Customer, String, QQueryOperations> wifiNameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'wifiName');
     });
   }
 }

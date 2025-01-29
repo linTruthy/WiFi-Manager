@@ -1,4 +1,4 @@
-package com.example.myapp
+package com.truthysystems.wifi
 
 import io.flutter.embedding.android.FlutterActivity
 

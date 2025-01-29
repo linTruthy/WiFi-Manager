@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:myapp/providers/payment_provider.dart';
+
 
 import '../database/models/payment.dart';
 import '../providers/customer_provider.dart';
+import '../providers/payment_provider.dart';
 import '../widgets/add_payment_dialog.dart';
 import '../widgets/receipt_button.dart';
 
@@ -112,7 +113,7 @@ class _PaymentSummaryCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Total Revenue: \$${summary['total']?.toStringAsFixed(2)}',
+                    'Total Revenue: UGX ${summary['total']?.toStringAsFixed(0)}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const Divider(),
@@ -150,11 +151,12 @@ class _SummaryRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(title), Text('\$${amount.toStringAsFixed(2)}')],
+        children: [Text(title), Text('UGX ${amount.toStringAsFixed(0)}')],
       ),
     );
   }
 }
+
 class _PaymentListTile extends ConsumerWidget {
   final Payment payment;
 
@@ -181,7 +183,7 @@ class _PaymentListTile extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '\$${payment.amount.toStringAsFixed(2)}',
+            'UGX ${payment.amount.toStringAsFixed(0)}',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           ReceiptButton(payment: payment),

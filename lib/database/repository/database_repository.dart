@@ -1,9 +1,10 @@
 import 'package:isar/isar.dart';
-import 'package:myapp/database/models/customer.dart';
-import 'package:myapp/database/models/payment.dart';
+
 import 'package:path_provider/path_provider.dart';
 
 import '../../services/notification_service.dart';
+import '../models/customer.dart';
+import '../models/payment.dart';
 import '../models/plan.dart';
 
 class DatabaseRepository {
@@ -31,6 +32,14 @@ class DatabaseRepository {
     final isar = await db;
     await isar.writeTxn(() async {
       await isar.customers.put(customer);
+    });
+  }
+
+  Future<void> deleteAllRecords() async {
+    final isar = await db;
+    await isar.writeTxn(() async {
+      await isar.customers.where().deleteAll();
+      await isar.payments.where().deleteAll();
     });
   }
 
@@ -101,11 +110,11 @@ extension NotificationExtension on DatabaseRepository {
   double _getPlanAmount(PlanType planType) {
     switch (planType) {
       case PlanType.daily:
-        return 5.0;
+        return 2000.0;
       case PlanType.weekly:
-        return 25.0;
+        return 10000.0;
       case PlanType.monthly:
-        return 80.0;
+        return 35000.0;
     }
   }
 }

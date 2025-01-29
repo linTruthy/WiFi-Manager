@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,9 +10,7 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('WiFi Manager'),
-      ),
+      appBar: AppBar(title: const Text('WiFi Manager')),
       body: Column(
         children: [
           const ExpiringSubscriptionsBanner(),
@@ -24,7 +21,6 @@ class HomeScreen extends ConsumerWidget {
               mainAxisSpacing: 16,
               crossAxisSpacing: 16,
               children: [
-                  
                 _DashboardCard(
                   title: 'Active Customers',
                   icon: Icons.people,
@@ -33,10 +29,11 @@ class HomeScreen extends ConsumerWidget {
                     builder: (context, ref, child) {
                       final customersAsync = ref.watch(activeCustomersProvider);
                       return customersAsync.when(
-                        data: (customers) => Text(
-                          customers.length.toString(),
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
+                        data:
+                            (customers) => Text(
+                              customers.length.toString(),
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
                         loading: () => const CircularProgressIndicator(),
                         error: (_, __) => const Icon(Icons.error),
                       );
@@ -46,15 +43,22 @@ class HomeScreen extends ConsumerWidget {
                 _DashboardCard(
                   title: 'Expiring Soon',
                   icon: Icons.warning,
-                  onTap: () => Navigator.pushNamed(context, '/expiring-subscriptions'),
+                  onTap:
+                      () => Navigator.pushNamed(
+                        context,
+                        '/expiring-subscriptions',
+                      ),
                   content: Consumer(
                     builder: (context, ref, child) {
-                      final expiringAsync = ref.watch(expiringCustomersProvider);
+                      final expiringAsync = ref.watch(
+                        expiringCustomersProvider,
+                      );
                       return expiringAsync.when(
-                        data: (customers) => Text(
-                          customers.length.toString(),
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
+                        data:
+                            (customers) => Text(
+                              customers.length.toString(),
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
                         loading: () => const CircularProgressIndicator(),
                         error: (_, __) => const Icon(Icons.error),
                       );
@@ -71,6 +75,12 @@ class HomeScreen extends ConsumerWidget {
                   icon: Icons.payments,
                   onTap: () => Navigator.pushNamed(context, '/payments'),
                 ),
+                               _DashboardCard(
+                  title: 'Delete All',
+                  icon: Icons.delete,
+                  onTap: () => ref.read(databaseProvider).deleteAllRecords(),
+                ),
+
               ],
             ),
           ),
@@ -106,10 +116,7 @@ class _DashboardCard extends StatelessWidget {
               Icon(icon, size: 32),
               const SizedBox(height: 8),
               Text(title),
-              if (content != null) ...[
-                const SizedBox(height: 8),
-                content!,
-              ],
+              if (content != null) ...[const SizedBox(height: 8), content!],
             ],
           ),
         ),

@@ -1,71 +1,275 @@
-// services/notification_service.dart
-
 import 'dart:io';
-
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
-
 import '../database/models/customer.dart';
 import '../database/models/payment.dart';
 
 class ReceiptService {
+  static final _currency = NumberFormat.currency(
+    symbol: 'UGX ',
+    decimalDigits: 0,
+  );
+
   static Future<void> generateAndShareReceipt({
     required Payment payment,
     required Customer customer,
   }) async {
     final pdf = pw.Document();
 
+    final titleStyle = pw.TextStyle(
+      font: pw.Font.helveticaBold(),
+      fontSize: 24,
+      color: PdfColors.blue900,
+    );
+    final headerStyle = pw.TextStyle(
+      font: pw.Font.helveticaBold(),
+      fontSize: 14,
+      color: PdfColors.blue900,
+    );
+    final subtitleStyle = pw.TextStyle(
+      font: pw.Font.helvetica(),
+      fontSize: 12,
+      color: PdfColors.grey800,
+    );
+    final labelStyle = pw.TextStyle(
+      font: pw.Font.helveticaBold(),
+      fontSize: 10,
+      color: PdfColors.grey700,
+    );
+    final valueStyle = pw.TextStyle(
+      font: pw.Font.helvetica(),
+      fontSize: 10,
+      color: PdfColors.black,
+    );
+    final noteStyle = pw.TextStyle(
+      font: pw.Font.helvetica(),
+      fontSize: 10,
+      color: PdfColors.grey700,
+      fontStyle: pw.FontStyle.italic,
+    );
+
     pdf.addPage(
       pw.Page(
+        pageFormat: PdfPageFormat.a4,
         build:
-            (context) => pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Header(
-                  level: 0,
-                  child: pw.Text(
-                    'Payment Receipt',
-                    style: pw.TextStyle(
-                      fontSize: 24,
-                      font: pw.Font.helveticaBold(),
+            (context) => pw.Container(
+              padding: const pw.EdgeInsets.all(40),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300, width: 1),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('TRUTHY SYSTEMS', style: titleStyle),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            'Internet Service Provider',
+                            style: subtitleStyle,
+                          ),
+                        ],
+                      ),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(10),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.blue50,
+                          borderRadius: const pw.BorderRadius.all(
+                            pw.Radius.circular(4),
+                          ),
+                        ),
+                        child: pw.Text('RECEIPT', style: headerStyle),
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 20),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    color: PdfColors.grey100,
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('Receipt No:', style: labelStyle),
+                            pw.SizedBox(height: 4),
+                            pw.Text('${payment.id}', style: valueStyle),
+                          ],
+                        ),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            pw.Text('Date:', style: labelStyle),
+                            pw.SizedBox(height: 4),
+                            pw.Text(
+                              DateFormat(
+                                'MMMM d, y',
+                              ).format(payment.paymentDate),
+                              style: valueStyle,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                pw.SizedBox(height: 20),
-                pw.Text('Receipt #: ${payment.id}'),
-                pw.Text(
-                  'Date: ${DateFormat('MMM d, y').format(payment.paymentDate)}',
-                ),
-                pw.SizedBox(height: 20),
-                pw.Text('Customer Details:'),
-                pw.Text('Name: ${customer.name}'),
-                pw.Text('Contact: ${customer.contact}'),
-                pw.SizedBox(height: 20),
-                pw.Text('Payment Details:'),
-                pw.Text('Plan: ${payment.planType.name}'),
-                pw.Text('Amount: \$${payment.amount.toStringAsFixed(2)}'),
-                pw.Text(
-                  'Status: ${payment.isConfirmed ? "Confirmed" : "Pending"}',
-                ),
-                pw.SizedBox(height: 40),
-                pw.Text('Thank you for your business!'),
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  'Valid until: ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}',
-                ),
-              ],
+                  pw.SizedBox(height: 20),
+                  pw.Container(
+                    width: double.infinity,
+                    padding: const pw.EdgeInsets.all(10),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('CUSTOMER DETAILS', style: headerStyle),
+                        pw.SizedBox(height: 10),
+                        _buildInfoRow(
+                          'Customer Name',
+                          customer.name,
+                          labelStyle,
+                          valueStyle,
+                        ),
+                        _buildInfoRow(
+                          'Contact',
+                          customer.contact,
+                          labelStyle,
+                          valueStyle,
+                        ),
+                        _buildInfoRow(
+                          'Subscription Period',
+                          '${DateFormat('MMM d, y').format(customer.subscriptionStart)} - ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}',
+                          labelStyle,
+                          valueStyle,
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 20),
+                  // Payment Details
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    color: PdfColors.grey100,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('PAYMENT DETAILS', style: headerStyle),
+                        pw.SizedBox(height: 10),
+                        _buildInfoRow(
+                          'Plan Type',
+                          payment.planType.name.toUpperCase(),
+                          labelStyle,
+                          valueStyle,
+                        ),
+                        _buildInfoRow(
+                          'Amount Paid',
+                          _currency.format(payment.amount),
+                          labelStyle,
+                          valueStyle,
+                        ),
+                        _buildInfoRow(
+                          'Payment Status',
+                          payment.isConfirmed ? 'Confirmed' : 'Pending',
+                          labelStyle,
+                          valueStyle,
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 20),
+                  // WiFi Credentials
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.blue200),
+                      borderRadius: const pw.BorderRadius.all(
+                        pw.Radius.circular(4),
+                      ),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('WIFI CREDENTIALS', style: headerStyle),
+                        pw.SizedBox(height: 10),
+                        _buildInfoRow(
+                          'WiFi Name',
+                          customer.wifiName,
+                          labelStyle,
+                          valueStyle,
+                        ),
+                        _buildInfoRow(
+                          'Password',
+                          customer.currentPassword,
+                          labelStyle,
+                          valueStyle,
+                        ),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          'Note: Connection is limited to 2 devices at a time with speeds up to 60Mbps',
+                          style: noteStyle,
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Spacer(),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 20),
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(
+                        top: pw.BorderSide(color: PdfColors.grey300),
+                      ),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text(
+                          'Thank you for choosing Truthy Systems!',
+                          style: headerStyle.copyWith(color: PdfColors.blue700),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          'For support, please contact: 0783009649',
+                          style: valueStyle,
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
       ),
     );
 
     final output = await getTemporaryDirectory();
-    final file = File('${output.path}/receipt_${payment.id}.pdf');
+    final file = File(
+      '${output.path}/truthy_systems_receipt_${payment.id}.pdf',
+    );
     await file.writeAsBytes(await pdf.save());
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: 'Payment Receipt - ${customer.name}',
+      subject: 'Truthy Systems - Internet Service Receipt',
+    );
+  }
 
-    await Share.shareXFiles([
-      XFile(file.path),
-    ], text: 'Payment Receipt for ${customer.name}');
+  static pw.Row _buildInfoRow(
+    String label,
+    String value,
+    pw.TextStyle labelStyle,
+    pw.TextStyle valueStyle,
+  ) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: labelStyle),
+        pw.Text(value, style: valueStyle),
+      ],
+    );
   }
 }

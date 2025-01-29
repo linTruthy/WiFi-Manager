@@ -1,8 +1,9 @@
-// providers/subscription_provider.dart
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:myapp/database/models/customer.dart';
+
 import 'package:timezone/timezone.dart' as tz;
+
+import '../database/models/customer.dart';
 
 class SubscriptionNotificationService {
   static final FlutterLocalNotificationsPlugin _notifications = 
