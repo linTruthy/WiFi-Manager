@@ -10,10 +10,7 @@ import '../services/receipt_service.dart';
 class ReceiptButton extends ConsumerWidget {
   final Payment payment;
 
-  const ReceiptButton({
-    super.key,
-    required this.payment,
-  });
+  const ReceiptButton({super.key, required this.payment});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,7 +18,9 @@ class ReceiptButton extends ConsumerWidget {
       icon: const Icon(Icons.receipt_long),
       onPressed: () async {
         try {
-          final customerAsync = await ref.read(customerProvider(payment.customerId).future);
+          final customerAsync = await ref.read(
+            customerProvider(payment.customerId).future,
+          );
           if (customerAsync != null) {
             await ReceiptService.generateAndShareReceipt(
               payment: payment,

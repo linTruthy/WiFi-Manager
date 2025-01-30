@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -22,11 +23,11 @@ class PaymentsScreen extends ConsumerWidget {
         title: const Text('Payment History'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.date_range),
+            icon: const Icon(CupertinoIcons.calendar),
             onPressed: () => _showDateRangePicker(context, ref),
           ),
           IconButton(
-            icon: const Icon(Icons.add),
+            icon: const Icon(CupertinoIcons.add),
             onPressed: () => _showAddPaymentDialog(context, ref),
           ),
         ],

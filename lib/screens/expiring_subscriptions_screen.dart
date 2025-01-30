@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -54,7 +53,12 @@ class ExpiringSubscriptionsScreen extends ConsumerWidget {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.message),
-                                onPressed: () => _sendMessage(customer.contact),
+                                onPressed:
+                                    () => _sendMessage(
+                                      customer.contact,
+                                      context,
+                                      daysUntilExpiry,
+                                    ),
                               ),
                             ],
                           ),
@@ -82,8 +86,51 @@ class ExpiringSubscriptionsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _sendMessage(String contact) async {
-    final url = Uri.parse('sms:$contact');
+  Future<void> _sendMessage(
+    String contact,
+    BuildContext context,
+    int daysUntilExpiry,
+  ) async {
+    final messageOptions = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Send Message'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.message),
+                  title: const Text('SMS'),
+                  onTap: () => Navigator.pop(context, 'sms'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.whatshot),
+                  title: const Text('WhatsApp Business'),
+                  onTap: () => Navigator.pop(context, 'whatsapp'),
+                ),
+              ],
+            ),
+          ),
+    );
+
+    if (messageOptions == null) return;
+    String daysleftString =
+        daysUntilExpiry <= 0 ? 'TODAY ' : 'in $daysUntilExpiry days';
+    final message = Uri.encodeComponent(
+      'Dear valued customer, this is a reminder that your WiFi subscription '
+      'is due for renewal. Please renew to avoid service interruption. '
+      'Your subscription will expire $daysleftString'
+      'Thank you for your continued support.',
+    );
+
+    final url =
+        messageOptions == 'whatsapp'
+            ? Uri.parse(
+              'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
+            )
+            : Uri.parse('sms:$contact?body=$message');
+
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     }

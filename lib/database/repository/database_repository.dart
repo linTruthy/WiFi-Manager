@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
-import '../../services/notification_service.dart';
+
 import '../../services/subscription_notification_service.dart';
 import '../models/customer.dart';
 import '../models/payment.dart';
@@ -272,29 +272,12 @@ Future<Isar> openDB() async {
 extension NotificationExtension on DatabaseRepository {
   Future<void> scheduleNotifications() async {
     await Future.wait([
-      schedulePaymentReminders(),
+     
       scheduleExpirationNotifications(),
     ]);
   }
 
-  Future<void> schedulePaymentReminders() async {
-    final customers = await getActiveCustomers();
-
-    for (final customer in customers) {
-      final daysUntilExpiry =
-          customer.subscriptionEnd.difference(DateTime.now()).inDays;
-
-      if (daysUntilExpiry <= 3 && daysUntilExpiry > 0) {
-        final amount = _getPlanAmount(customer.planType);
-        await NotificationService.schedulePaymentReminder(
-          customerId: customer.id,
-          customerName: customer.name,
-          dueDate: customer.subscriptionEnd,
-          amount: amount,
-        );
-      }
-    }
-  }
+ 
 
   Future<void> scheduleExpirationNotifications() async {
     final customers = await getActiveCustomers();
@@ -306,14 +289,4 @@ extension NotificationExtension on DatabaseRepository {
     }
   }
 
-  double _getPlanAmount(PlanType planType) {
-    switch (planType) {
-      case PlanType.daily:
-        return 2000.0;
-      case PlanType.weekly:
-        return 10000.0;
-      case PlanType.monthly:
-        return 35000.0;
-    }
-  }
 }
