@@ -32,13 +32,18 @@ const PaymentSchema = CollectionSchema(
       name: r'isConfirmed',
       type: IsarType.bool,
     ),
-    r'paymentDate': PropertySchema(
+    r'lastModified': PropertySchema(
       id: 3,
+      name: r'lastModified',
+      type: IsarType.dateTime,
+    ),
+    r'paymentDate': PropertySchema(
+      id: 4,
       name: r'paymentDate',
       type: IsarType.dateTime,
     ),
     r'planType': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'planType',
       type: IsarType.string,
       enumMap: _PaymentplanTypeEnumValueMap,
@@ -58,6 +63,19 @@ const PaymentSchema = CollectionSchema(
       properties: [
         IndexPropertySchema(
           name: r'paymentDate',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    ),
+    r'lastModified': IndexSchema(
+      id: 5953778071269117195,
+      name: r'lastModified',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'lastModified',
           type: IndexType.value,
           caseSensitive: false,
         )
@@ -92,8 +110,9 @@ void _paymentSerialize(
   writer.writeDouble(offsets[0], object.amount);
   writer.writeString(offsets[1], object.customerId);
   writer.writeBool(offsets[2], object.isConfirmed);
-  writer.writeDateTime(offsets[3], object.paymentDate);
-  writer.writeString(offsets[4], object.planType.name);
+  writer.writeDateTime(offsets[3], object.lastModified);
+  writer.writeDateTime(offsets[4], object.paymentDate);
+  writer.writeString(offsets[5], object.planType.name);
 }
 
 Payment _paymentDeserialize(
@@ -106,12 +125,13 @@ Payment _paymentDeserialize(
     amount: reader.readDouble(offsets[0]),
     customerId: reader.readString(offsets[1]),
     isConfirmed: reader.readBoolOrNull(offsets[2]) ?? false,
-    paymentDate: reader.readDateTime(offsets[3]),
+    paymentDate: reader.readDateTime(offsets[4]),
     planType:
-        _PaymentplanTypeValueEnumMap[reader.readStringOrNull(offsets[4])] ??
+        _PaymentplanTypeValueEnumMap[reader.readStringOrNull(offsets[5])] ??
             PlanType.daily,
   );
   object.id = id;
+  object.lastModified = reader.readDateTime(offsets[3]);
   return object;
 }
 
@@ -131,6 +151,8 @@ P _paymentDeserializeProp<P>(
     case 3:
       return (reader.readDateTime(offset)) as P;
     case 4:
+      return (reader.readDateTime(offset)) as P;
+    case 5:
       return (_PaymentplanTypeValueEnumMap[reader.readStringOrNull(offset)] ??
           PlanType.daily) as P;
     default:
@@ -172,6 +194,14 @@ extension PaymentQueryWhereSort on QueryBuilder<Payment, Payment, QWhere> {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'paymentDate'),
+      );
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterWhere> anyLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'lastModified'),
       );
     });
   }
@@ -328,6 +358,96 @@ extension PaymentQueryWhere on QueryBuilder<Payment, Payment, QWhereClause> {
         lower: [lowerPaymentDate],
         includeLower: includeLower,
         upper: [upperPaymentDate],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterWhereClause> lastModifiedEqualTo(
+      DateTime lastModified) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'lastModified',
+        value: [lastModified],
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterWhereClause> lastModifiedNotEqualTo(
+      DateTime lastModified) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [],
+              upper: [lastModified],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [lastModified],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [lastModified],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [],
+              upper: [lastModified],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterWhereClause> lastModifiedGreaterThan(
+    DateTime lastModified, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastModified',
+        lower: [lastModified],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterWhereClause> lastModifiedLessThan(
+    DateTime lastModified, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastModified',
+        lower: [],
+        upper: [lastModified],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterWhereClause> lastModifiedBetween(
+    DateTime lowerLastModified,
+    DateTime upperLastModified, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastModified',
+        lower: [lowerLastModified],
+        includeLower: includeLower,
+        upper: [upperLastModified],
         includeUpper: includeUpper,
       ));
     });
@@ -590,6 +710,59 @@ extension PaymentQueryFilter
     });
   }
 
+  QueryBuilder<Payment, Payment, QAfterFilterCondition> lastModifiedEqualTo(
+      DateTime value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'lastModified',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterFilterCondition> lastModifiedGreaterThan(
+    DateTime value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'lastModified',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterFilterCondition> lastModifiedLessThan(
+    DateTime value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'lastModified',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterFilterCondition> lastModifiedBetween(
+    DateTime lower,
+    DateTime upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'lastModified',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<Payment, Payment, QAfterFilterCondition> paymentDateEqualTo(
       DateTime value) {
     return QueryBuilder.apply(this, (query) {
@@ -817,6 +990,18 @@ extension PaymentQuerySortBy on QueryBuilder<Payment, Payment, QSortBy> {
     });
   }
 
+  QueryBuilder<Payment, Payment, QAfterSortBy> sortByLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterSortBy> sortByLastModifiedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.desc);
+    });
+  }
+
   QueryBuilder<Payment, Payment, QAfterSortBy> sortByPaymentDate() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'paymentDate', Sort.asc);
@@ -892,6 +1077,18 @@ extension PaymentQuerySortThenBy
     });
   }
 
+  QueryBuilder<Payment, Payment, QAfterSortBy> thenByLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Payment, Payment, QAfterSortBy> thenByLastModifiedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.desc);
+    });
+  }
+
   QueryBuilder<Payment, Payment, QAfterSortBy> thenByPaymentDate() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'paymentDate', Sort.asc);
@@ -938,6 +1135,12 @@ extension PaymentQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Payment, Payment, QDistinct> distinctByLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'lastModified');
+    });
+  }
+
   QueryBuilder<Payment, Payment, QDistinct> distinctByPaymentDate() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'paymentDate');
@@ -975,6 +1178,12 @@ extension PaymentQueryProperty
   QueryBuilder<Payment, bool, QQueryOperations> isConfirmedProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'isConfirmed');
+    });
+  }
+
+  QueryBuilder<Payment, DateTime, QQueryOperations> lastModifiedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'lastModified');
     });
   }
 

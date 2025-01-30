@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/database_provider.dart';
+import '../providers/notification_schedule_provider.dart';
 import '../widgets/expiring_subscriptions_banner.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -9,6 +10,8 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(notificationSchedulerProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('WiFi Manager')),
       body: Column(
@@ -75,12 +78,11 @@ class HomeScreen extends ConsumerWidget {
                   icon: Icons.payments,
                   onTap: () => Navigator.pushNamed(context, '/payments'),
                 ),
-                               _DashboardCard(
+                _DashboardCard(
                   title: 'Delete All',
                   icon: Icons.delete,
                   onTap: () => ref.read(databaseProvider).deleteAllRecords(),
                 ),
-
               ],
             ),
           ),

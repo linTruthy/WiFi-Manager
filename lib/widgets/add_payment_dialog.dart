@@ -145,15 +145,15 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
     }
   }
 
-  String _generatePassword() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = DateTime.now().millisecondsSinceEpoch;
-    final password =
-        List.generate(6, (index) {
-          return chars[random % chars.length];
-        }).join();
-    return password;
-  }
+  // String _generatePassword() {
+  //   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  //   final random = DateTime.now().millisecondsSinceEpoch;
+  //   final password =
+  //       List.generate(6, (index) {
+  //         return chars[random % chars.length];
+  //       }).join();
+  //   return password;
+  // }
 
   void _updateAmount() {
     switch (_selectedPlan) {
@@ -218,7 +218,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
           if (previousPayments.length <= 1) {
             // Including the payment we just created
             customer.wifiName = Customer.generateWifiName(customer.name);
-            customer.currentPassword = _generatePassword();
+            customer.currentPassword = Customer.generate();
           }
 
           await isar.customers.put(customer);

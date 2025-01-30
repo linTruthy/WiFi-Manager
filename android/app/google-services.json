@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "391437135862",
+    "project_id": "truthy-wifi-manager",
+    "storage_bucket": "truthy-wifi-manager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:391437135862:android:19b72a576bafd2228f61d7",
+        "android_client_info": {
+          "package_name": "com.truthysystems.wifi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA73mJ5ztnDoIX7qRy8wI0QfLLtgbAFouY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

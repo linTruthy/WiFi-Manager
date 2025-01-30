@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
 import '../providers/database_provider.dart';
 
 class EditCustomerScreen extends ConsumerStatefulWidget {
   final Customer customer;
-  
-  const EditCustomerScreen({
-    super.key,
-    required this.customer,
-  });
+
+  const EditCustomerScreen({super.key, required this.customer});
 
   @override
   ConsumerState<EditCustomerScreen> createState() => _EditCustomerScreenState();
@@ -33,7 +29,9 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
     _nameController = TextEditingController(text: widget.customer.name);
     _contactController = TextEditingController(text: widget.customer.contact);
     _wifiNameController = TextEditingController(text: widget.customer.wifiName);
-    _passwordController = TextEditingController(text: widget.customer.currentPassword);
+    _passwordController = TextEditingController(
+      text: widget.customer.currentPassword,
+    );
     _isActive = widget.customer.isActive;
     _selectedPlan = widget.customer.planType;
   }
@@ -53,10 +51,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
       appBar: AppBar(
         title: const Text('Edit Customer'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveCustomer,
-          ),
+          IconButton(icon: const Icon(Icons.save), onPressed: _saveCustomer),
         ],
       ),
       body: Form(
@@ -133,12 +128,13 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
                 labelText: 'Plan',
                 border: OutlineInputBorder(),
               ),
-              items: PlanType.values.map((plan) {
-                return DropdownMenuItem(
-                  value: plan,
-                  child: Text(plan.name),
-                );
-              }).toList(),
+              items:
+                  PlanType.values.map((plan) {
+                    return DropdownMenuItem(
+                      value: plan,
+                      child: Text(plan.name),
+                    );
+                  }).toList(),
               onChanged: (PlanType? value) {
                 if (value != null) {
                   setState(() => _selectedPlan = value);

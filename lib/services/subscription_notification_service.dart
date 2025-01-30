@@ -1,4 +1,3 @@
-
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'package:timezone/timezone.dart' as tz;
@@ -6,12 +5,13 @@ import 'package:timezone/timezone.dart' as tz;
 import '../database/models/customer.dart';
 
 class SubscriptionNotificationService {
-  static final FlutterLocalNotificationsPlugin _notifications = 
+  static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
-  
+
   static const String channelId = 'subscription_notifications';
   static const String channelName = 'Subscription Notifications';
-  static const String channelDescription = 'Notifications for expiring subscriptions';
+  static const String channelDescription =
+      'Notifications for expiring subscriptions';
 
   static Future<void> initialize() async {
     const initializationSettings = InitializationSettings(
@@ -22,7 +22,7 @@ class SubscriptionNotificationService {
         requestSoundPermission: true,
       ),
     );
-    
+
     await _notifications.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (details) async {
@@ -36,8 +36,9 @@ class SubscriptionNotificationService {
   }
 
   static Future<void> scheduleExpirationNotification(Customer customer) async {
-    final daysUntilExpiry = customer.subscriptionEnd.difference(DateTime.now()).inDays;
-    
+    final daysUntilExpiry =
+        customer.subscriptionEnd.difference(DateTime.now()).inDays;
+
     if (daysUntilExpiry <= 3 && daysUntilExpiry > 0) {
       final androidDetails = AndroidNotificationDetails(
         channelId,

@@ -111,11 +111,12 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           Navigator.pop(context);
           ref.invalidate(activeCustomersProvider);
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Error saving customer: $e')));
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:2261690070.
+          ).showSnackBar(SnackBar(content: SelectableText('Error saving customer: $e | $stackTrace'),duration: Duration(minutes: 2),));
         }
       }
     }

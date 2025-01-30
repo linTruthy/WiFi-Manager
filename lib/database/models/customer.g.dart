@@ -32,29 +32,34 @@ const CustomerSchema = CollectionSchema(
       name: r'isActive',
       type: IsarType.bool,
     ),
-    r'name': PropertySchema(
+    r'lastModified': PropertySchema(
       id: 3,
+      name: r'lastModified',
+      type: IsarType.dateTime,
+    ),
+    r'name': PropertySchema(
+      id: 4,
       name: r'name',
       type: IsarType.string,
     ),
     r'planType': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'planType',
       type: IsarType.string,
       enumMap: _CustomerplanTypeEnumValueMap,
     ),
     r'subscriptionEnd': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'subscriptionEnd',
       type: IsarType.dateTime,
     ),
     r'subscriptionStart': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'subscriptionStart',
       type: IsarType.dateTime,
     ),
     r'wifiName': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'wifiName',
       type: IsarType.string,
     )
@@ -90,6 +95,19 @@ const CustomerSchema = CollectionSchema(
           caseSensitive: true,
         )
       ],
+    ),
+    r'lastModified': IndexSchema(
+      id: 5953778071269117195,
+      name: r'lastModified',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'lastModified',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
     )
   },
   links: {},
@@ -123,11 +141,12 @@ void _customerSerialize(
   writer.writeString(offsets[0], object.contact);
   writer.writeString(offsets[1], object.currentPassword);
   writer.writeBool(offsets[2], object.isActive);
-  writer.writeString(offsets[3], object.name);
-  writer.writeString(offsets[4], object.planType.name);
-  writer.writeDateTime(offsets[5], object.subscriptionEnd);
-  writer.writeDateTime(offsets[6], object.subscriptionStart);
-  writer.writeString(offsets[7], object.wifiName);
+  writer.writeDateTime(offsets[3], object.lastModified);
+  writer.writeString(offsets[4], object.name);
+  writer.writeString(offsets[5], object.planType.name);
+  writer.writeDateTime(offsets[6], object.subscriptionEnd);
+  writer.writeDateTime(offsets[7], object.subscriptionStart);
+  writer.writeString(offsets[8], object.wifiName);
 }
 
 Customer _customerDeserialize(
@@ -140,15 +159,16 @@ Customer _customerDeserialize(
     contact: reader.readString(offsets[0]),
     currentPassword: reader.readString(offsets[1]),
     isActive: reader.readBool(offsets[2]),
-    name: reader.readString(offsets[3]),
+    name: reader.readString(offsets[4]),
     planType:
-        _CustomerplanTypeValueEnumMap[reader.readStringOrNull(offsets[4])] ??
+        _CustomerplanTypeValueEnumMap[reader.readStringOrNull(offsets[5])] ??
             PlanType.daily,
-    subscriptionEnd: reader.readDateTime(offsets[5]),
-    subscriptionStart: reader.readDateTime(offsets[6]),
-    wifiName: reader.readString(offsets[7]),
+    subscriptionEnd: reader.readDateTime(offsets[6]),
+    subscriptionStart: reader.readDateTime(offsets[7]),
+    wifiName: reader.readString(offsets[8]),
   );
   object.id = id;
+  object.lastModified = reader.readDateTime(offsets[3]);
   return object;
 }
 
@@ -166,15 +186,17 @@ P _customerDeserializeProp<P>(
     case 2:
       return (reader.readBool(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (_CustomerplanTypeValueEnumMap[reader.readStringOrNull(offset)] ??
           PlanType.daily) as P;
-    case 5:
-      return (reader.readDateTime(offset)) as P;
     case 6:
       return (reader.readDateTime(offset)) as P;
     case 7:
+      return (reader.readDateTime(offset)) as P;
+    case 8:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -223,6 +245,14 @@ extension CustomerQueryWhereSort on QueryBuilder<Customer, Customer, QWhere> {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'wifiName'),
+      );
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhere> anyLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'lastModified'),
       );
     });
   }
@@ -564,6 +594,96 @@ extension CustomerQueryWhere on QueryBuilder<Customer, Customer, QWhereClause> {
       }
     });
   }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> lastModifiedEqualTo(
+      DateTime lastModified) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'lastModified',
+        value: [lastModified],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> lastModifiedNotEqualTo(
+      DateTime lastModified) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [],
+              upper: [lastModified],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [lastModified],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [lastModified],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastModified',
+              lower: [],
+              upper: [lastModified],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> lastModifiedGreaterThan(
+    DateTime lastModified, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastModified',
+        lower: [lastModified],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> lastModifiedLessThan(
+    DateTime lastModified, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastModified',
+        lower: [],
+        upper: [lastModified],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> lastModifiedBetween(
+    DateTime lowerLastModified,
+    DateTime upperLastModified, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastModified',
+        lower: [lowerLastModified],
+        includeLower: includeLower,
+        upper: [upperLastModified],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
 }
 
 extension CustomerQueryFilter
@@ -892,6 +1012,60 @@ extension CustomerQueryFilter
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'isActive',
         value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> lastModifiedEqualTo(
+      DateTime value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'lastModified',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      lastModifiedGreaterThan(
+    DateTime value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'lastModified',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> lastModifiedLessThan(
+    DateTime value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'lastModified',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> lastModifiedBetween(
+    DateTime lower,
+    DateTime upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'lastModified',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
       ));
     });
   }
@@ -1442,6 +1616,18 @@ extension CustomerQuerySortBy on QueryBuilder<Customer, Customer, QSortBy> {
     });
   }
 
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByLastModifiedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.desc);
+    });
+  }
+
   QueryBuilder<Customer, Customer, QAfterSortBy> sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -1553,6 +1739,18 @@ extension CustomerQuerySortThenBy
     });
   }
 
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByLastModifiedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastModified', Sort.desc);
+    });
+  }
+
   QueryBuilder<Customer, Customer, QAfterSortBy> thenByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -1637,6 +1835,12 @@ extension CustomerQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Customer, Customer, QDistinct> distinctByLastModified() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'lastModified');
+    });
+  }
+
   QueryBuilder<Customer, Customer, QDistinct> distinctByName(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1694,6 +1898,12 @@ extension CustomerQueryProperty
   QueryBuilder<Customer, bool, QQueryOperations> isActiveProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'isActive');
+    });
+  }
+
+  QueryBuilder<Customer, DateTime, QQueryOperations> lastModifiedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'lastModified');
     });
   }
 
