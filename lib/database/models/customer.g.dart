@@ -48,18 +48,33 @@ const CustomerSchema = CollectionSchema(
       type: IsarType.string,
       enumMap: _CustomerplanTypeEnumValueMap,
     ),
-    r'subscriptionEnd': PropertySchema(
+    r'referralCode': PropertySchema(
       id: 6,
+      name: r'referralCode',
+      type: IsarType.string,
+    ),
+    r'referralRewardApplied': PropertySchema(
+      id: 7,
+      name: r'referralRewardApplied',
+      type: IsarType.dateTime,
+    ),
+    r'referredBy': PropertySchema(
+      id: 8,
+      name: r'referredBy',
+      type: IsarType.string,
+    ),
+    r'subscriptionEnd': PropertySchema(
+      id: 9,
       name: r'subscriptionEnd',
       type: IsarType.dateTime,
     ),
     r'subscriptionStart': PropertySchema(
-      id: 7,
+      id: 10,
       name: r'subscriptionStart',
       type: IsarType.dateTime,
     ),
     r'wifiName': PropertySchema(
-      id: 8,
+      id: 11,
       name: r'wifiName',
       type: IsarType.string,
     )
@@ -108,6 +123,19 @@ const CustomerSchema = CollectionSchema(
           caseSensitive: false,
         )
       ],
+    ),
+    r'referralCode': IndexSchema(
+      id: -4338819291147892514,
+      name: r'referralCode',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'referralCode',
+          type: IndexType.value,
+          caseSensitive: true,
+        )
+      ],
     )
   },
   links: {},
@@ -128,6 +156,13 @@ int _customerEstimateSize(
   bytesCount += 3 + object.currentPassword.length * 3;
   bytesCount += 3 + object.name.length * 3;
   bytesCount += 3 + object.planType.name.length * 3;
+  bytesCount += 3 + object.referralCode.length * 3;
+  {
+    final value = object.referredBy;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.wifiName.length * 3;
   return bytesCount;
 }
@@ -144,9 +179,12 @@ void _customerSerialize(
   writer.writeDateTime(offsets[3], object.lastModified);
   writer.writeString(offsets[4], object.name);
   writer.writeString(offsets[5], object.planType.name);
-  writer.writeDateTime(offsets[6], object.subscriptionEnd);
-  writer.writeDateTime(offsets[7], object.subscriptionStart);
-  writer.writeString(offsets[8], object.wifiName);
+  writer.writeString(offsets[6], object.referralCode);
+  writer.writeDateTime(offsets[7], object.referralRewardApplied);
+  writer.writeString(offsets[8], object.referredBy);
+  writer.writeDateTime(offsets[9], object.subscriptionEnd);
+  writer.writeDateTime(offsets[10], object.subscriptionStart);
+  writer.writeString(offsets[11], object.wifiName);
 }
 
 Customer _customerDeserialize(
@@ -163,12 +201,15 @@ Customer _customerDeserialize(
     planType:
         _CustomerplanTypeValueEnumMap[reader.readStringOrNull(offsets[5])] ??
             PlanType.daily,
-    subscriptionEnd: reader.readDateTime(offsets[6]),
-    subscriptionStart: reader.readDateTime(offsets[7]),
-    wifiName: reader.readString(offsets[8]),
+    referralRewardApplied: reader.readDateTimeOrNull(offsets[7]),
+    referredBy: reader.readStringOrNull(offsets[8]),
+    subscriptionEnd: reader.readDateTime(offsets[9]),
+    subscriptionStart: reader.readDateTime(offsets[10]),
+    wifiName: reader.readString(offsets[11]),
   );
   object.id = id;
   object.lastModified = reader.readDateTime(offsets[3]);
+  object.referralCode = reader.readString(offsets[6]);
   return object;
 }
 
@@ -193,10 +234,16 @@ P _customerDeserializeProp<P>(
       return (_CustomerplanTypeValueEnumMap[reader.readStringOrNull(offset)] ??
           PlanType.daily) as P;
     case 6:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 7:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 8:
+      return (reader.readStringOrNull(offset)) as P;
+    case 9:
+      return (reader.readDateTime(offset)) as P;
+    case 10:
+      return (reader.readDateTime(offset)) as P;
+    case 11:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -253,6 +300,14 @@ extension CustomerQueryWhereSort on QueryBuilder<Customer, Customer, QWhere> {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'lastModified'),
+      );
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhere> anyReferralCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'referralCode'),
       );
     });
   }
@@ -682,6 +737,142 @@ extension CustomerQueryWhere on QueryBuilder<Customer, Customer, QWhereClause> {
         upper: [upperLastModified],
         includeUpper: includeUpper,
       ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeEqualTo(
+      String referralCode) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'referralCode',
+        value: [referralCode],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeNotEqualTo(
+      String referralCode) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'referralCode',
+              lower: [],
+              upper: [referralCode],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'referralCode',
+              lower: [referralCode],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'referralCode',
+              lower: [referralCode],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'referralCode',
+              lower: [],
+              upper: [referralCode],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeGreaterThan(
+    String referralCode, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'referralCode',
+        lower: [referralCode],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeLessThan(
+    String referralCode, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'referralCode',
+        lower: [],
+        upper: [referralCode],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeBetween(
+    String lowerReferralCode,
+    String upperReferralCode, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'referralCode',
+        lower: [lowerReferralCode],
+        includeLower: includeLower,
+        upper: [upperReferralCode],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeStartsWith(
+      String ReferralCodePrefix) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'referralCode',
+        lower: [ReferralCodePrefix],
+        upper: ['$ReferralCodePrefix\u{FFFFF}'],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'referralCode',
+        value: [''],
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterWhereClause> referralCodeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.lessThan(
+              indexName: r'referralCode',
+              upper: [''],
+            ))
+            .addWhereClause(IndexWhereClause.greaterThan(
+              indexName: r'referralCode',
+              lower: [''],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.greaterThan(
+              indexName: r'referralCode',
+              lower: [''],
+            ))
+            .addWhereClause(IndexWhereClause.lessThan(
+              indexName: r'referralCode',
+              upper: [''],
+            ));
+      }
     });
   }
 }
@@ -1330,6 +1521,362 @@ extension CustomerQueryFilter
     });
   }
 
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referralCodeEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referralCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralCodeGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'referralCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referralCodeLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'referralCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referralCodeBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'referralCode',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralCodeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'referralCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referralCodeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'referralCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referralCodeContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'referralCode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referralCodeMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'referralCode',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralCodeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referralCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralCodeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'referralCode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralRewardAppliedIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'referralRewardApplied',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralRewardAppliedIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'referralRewardApplied',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralRewardAppliedEqualTo(DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referralRewardApplied',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralRewardAppliedGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'referralRewardApplied',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralRewardAppliedLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'referralRewardApplied',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referralRewardAppliedBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'referralRewardApplied',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'referredBy',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referredByIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'referredBy',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referredBy',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'referredBy',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'referredBy',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'referredBy',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'referredBy',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'referredBy',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'referredBy',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'referredBy',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition> referredByIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referredBy',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterFilterCondition>
+      referredByIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'referredBy',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Customer, Customer, QAfterFilterCondition>
       subscriptionEndEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
@@ -1652,6 +2199,43 @@ extension CustomerQuerySortBy on QueryBuilder<Customer, Customer, QSortBy> {
     });
   }
 
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByReferralCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByReferralCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByReferralRewardApplied() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralRewardApplied', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy>
+      sortByReferralRewardAppliedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralRewardApplied', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByReferredBy() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referredBy', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> sortByReferredByDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referredBy', Sort.desc);
+    });
+  }
+
   QueryBuilder<Customer, Customer, QAfterSortBy> sortBySubscriptionEnd() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'subscriptionEnd', Sort.asc);
@@ -1775,6 +2359,43 @@ extension CustomerQuerySortThenBy
     });
   }
 
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByReferralCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByReferralCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByReferralRewardApplied() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralRewardApplied', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy>
+      thenByReferralRewardAppliedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referralRewardApplied', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByReferredBy() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referredBy', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QAfterSortBy> thenByReferredByDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referredBy', Sort.desc);
+    });
+  }
+
   QueryBuilder<Customer, Customer, QAfterSortBy> thenBySubscriptionEnd() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'subscriptionEnd', Sort.asc);
@@ -1855,6 +2476,27 @@ extension CustomerQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Customer, Customer, QDistinct> distinctByReferralCode(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'referralCode', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QDistinct>
+      distinctByReferralRewardApplied() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'referralRewardApplied');
+    });
+  }
+
+  QueryBuilder<Customer, Customer, QDistinct> distinctByReferredBy(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'referredBy', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Customer, Customer, QDistinct> distinctBySubscriptionEnd() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'subscriptionEnd');
@@ -1916,6 +2558,25 @@ extension CustomerQueryProperty
   QueryBuilder<Customer, PlanType, QQueryOperations> planTypeProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'planType');
+    });
+  }
+
+  QueryBuilder<Customer, String, QQueryOperations> referralCodeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'referralCode');
+    });
+  }
+
+  QueryBuilder<Customer, DateTime?, QQueryOperations>
+      referralRewardAppliedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'referralRewardApplied');
+    });
+  }
+
+  QueryBuilder<Customer, String?, QQueryOperations> referredByProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'referredBy');
     });
   }
 

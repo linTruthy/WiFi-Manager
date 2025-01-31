@@ -2,11 +2,16 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:isar/isar.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:wifi_manager/app_router.dart';
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../main.dart';
+import '../screens/customer_detail_screen.dart';
 
 class SubscriptionNotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -20,6 +25,47 @@ class SubscriptionNotificationService {
   static Future<void> initialize() async {
     await _requestPermissions();
     await _initializeNotifications();
+    _notifications.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      ),
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
+        final payload = response.payload;
+        if (payload != null) {
+          // Navigate to the customer details page
+          final context = navigatorKey.currentContext;
+          if (context != null) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => _buildCustomerDetailScreen(payload),
+              ),
+            );
+          }
+        }
+      },
+    );
+  }
+
+  static Widget _buildCustomerDetailScreen(String customerId) {
+    return FutureBuilder<Customer?>(
+      future: _getCustomerById(int.parse(customerId)),
+      builder: (context, snapshot) {
+        return AppRouter.buildLoadingOrError(
+          snapshot,
+          (data) => CustomerDetailScreen(customer: data),
+        );
+      },
+    );
+  }
+
+  static Future<Customer> _getCustomerById(int customerId) async {
+    final isar = Isar.getInstance('wifi_manager');
+    final customer = await isar?.customers.get(customerId);
+    if (customer == null) {
+      throw Exception('Customer not found');
+    }
+    return customer;
   }
 
   static Future<void> _requestPermissions() async {
@@ -54,7 +100,6 @@ class SubscriptionNotificationService {
     );
 
     await _notifications.initialize(initializationSettings);
-    
   }
 
   static Future<void> scheduleExpirationNotification(Customer customer) async {
@@ -81,6 +126,7 @@ class SubscriptionNotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
+        payload: customer.id.toString(),
       );
       await _markNotificationScheduled(customer.id, notificationTime);
       debugPrint('Scheduled notification for ${customer.name}');

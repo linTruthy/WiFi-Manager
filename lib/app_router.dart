@@ -40,7 +40,7 @@ class AppRouter {
     return FutureBuilder<Customer?>(
       future: _getCustomerById(customerId, ref),
       builder: (context, snapshot) {
-        return _buildLoadingOrError(
+        return buildLoadingOrError(
           snapshot,
           (data) => CustomerDetailScreen(customer: data),
         );
@@ -52,7 +52,7 @@ class AppRouter {
     return FutureBuilder<Customer?>(
       future: _getCustomerById(customerId, ref),
       builder: (context, snapshot) {
-        return _buildLoadingOrError(
+        return buildLoadingOrError(
           snapshot,
           (data) => EditCustomerScreen(customer: data),
         );
@@ -61,7 +61,7 @@ class AppRouter {
   }
 
   // Reusable loading/error handler
-  static Widget _buildLoadingOrError(
+  static Widget buildLoadingOrError(
     AsyncSnapshot<Customer?> snapshot,
     Widget Function(Customer) onData,
   ) {

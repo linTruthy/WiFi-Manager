@@ -28,6 +28,13 @@ class Customer {
   @Enumerated(EnumType.name)
   PlanType planType;
 
+  // New fields for referral program
+  String? referredBy; // ID of the customer who referred this customer
+  DateTime?
+  referralRewardApplied; // Timestamp when the referral reward was applied
+  @Index(type: IndexType.value) // Add index for efficient lookup
+  String referralCode; // Unique referral code for this customer
+
   Customer({
     required this.name,
     required this.contact,
@@ -37,7 +44,11 @@ class Customer {
     required this.subscriptionStart,
     required this.subscriptionEnd,
     required this.planType,
-  }) : lastModified = DateTime.now();
+    this.referredBy,
+    this.referralRewardApplied,
+  }) : referralCode =
+           _generateReferralCode(), // Generate referral code on creation
+       lastModified = DateTime.now();
 
   // Convert Customer instance to JSON
   Map<String, dynamic> toJson() {
@@ -86,15 +97,17 @@ class Customer {
     PlanType? planType,
   }) {
     return Customer(
-      name: name ?? this.name,
-      contact: contact ?? this.contact,
-      isActive: isActive ?? this.isActive,
-      wifiName: wifiName ?? this.wifiName,
-      currentPassword: currentPassword ?? this.currentPassword,
-      subscriptionStart: subscriptionStart ?? this.subscriptionStart,
-      subscriptionEnd: subscriptionEnd ?? this.subscriptionEnd,
-      planType: planType ?? this.planType,
-    )..id = id;
+        name: name ?? this.name,
+        contact: contact ?? this.contact,
+        isActive: isActive ?? this.isActive,
+        wifiName: wifiName ?? this.wifiName,
+        currentPassword: currentPassword ?? this.currentPassword,
+        subscriptionStart: subscriptionStart ?? this.subscriptionStart,
+        subscriptionEnd: subscriptionEnd ?? this.subscriptionEnd,
+        planType: planType ?? this.planType,
+      )
+      ..id = id
+      ..lastModified = DateTime.now();
   }
 
   static const int _minLength = 4;
@@ -283,4 +296,12 @@ class Customer {
 
     return hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChars;
   }
+}
+
+String _generateReferralCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  final random = Random.secure();
+  return String.fromCharCodes(
+    List.generate(6, (index) => chars.codeUnitAt(random.nextInt(chars.length))),
+  );
 }

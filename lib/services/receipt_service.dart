@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import 'package:wifi_manager/database/models/plan.dart';
 import '../database/models/customer.dart';
 import '../database/models/payment.dart';
 
@@ -18,7 +20,11 @@ class ReceiptService {
     required Customer customer,
   }) async {
     final pdf = pw.Document();
-
+    final isar = Isar.getInstance('wifi_manager');
+    final referrer =
+        customer.referredBy != null
+            ? await isar?.customers.get(int.parse(customer.referredBy!))
+            : null;
     final titleStyle = pw.TextStyle(
       font: pw.Font.helveticaBold(),
       fontSize: 24,
@@ -181,6 +187,101 @@ class ReceiptService {
                       ],
                     ),
                   ),
+
+                  pw.SizedBox(height: 20),
+                  // Add referral information
+                  if (referrer != null)
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey100,
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(4),
+                        ),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('REFERRAL INFORMATION', style: headerStyle),
+                          pw.SizedBox(height: 10),
+                          _buildInfoRow(
+                            'Referred By',
+                            referrer.name,
+                            labelStyle,
+                            valueStyle,
+                          ),
+                          _buildInfoRow(
+                            'Referral Reward',
+                            '${_calculateReferralReward(referrer.planType, customer.planType).inDays} days free',
+                            labelStyle,
+                            valueStyle,
+                          ),
+                        ],
+                      ),
+                    ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.blue50,
+                      borderRadius: const pw.BorderRadius.all(
+                        pw.Radius.circular(4),
+                      ),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('YOUR REFERRAL CODE', style: headerStyle),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          customer.referralCode,
+                          style: pw.TextStyle(
+                            fontSize: 18,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blue900,
+                          ),
+                        ),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          'Share your referral code with friends and earn free subscription days!',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey800,
+                            fontStyle: pw.FontStyle.italic,
+                          ),
+                        ),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          'For every friend who joins using your referral code, you get:',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey800,
+                          ),
+                        ),
+                        pw.SizedBox(height: 5),
+                        pw.Text(
+                          '- 7 days free for monthly plan referrals',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey800,
+                          ),
+                        ),
+                        pw.Text(
+                          '- 3 days free for weekly plan referrals',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey800,
+                          ),
+                        ),
+                        pw.Text(
+                          '- 1 day free for daily plan referrals',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   pw.SizedBox(height: 20),
                   // WiFi Credentials
                   pw.Container(
@@ -271,5 +372,19 @@ class ReceiptService {
         pw.Text(value, style: valueStyle),
       ],
     );
+  }
+
+  static Duration _calculateReferralReward(
+    PlanType referrerPlan,
+    PlanType newCustomerPlan,
+  ) {
+    // Define referral rewards based on plans
+    if (newCustomerPlan == PlanType.monthly) {
+      return const Duration(days: 7); // 7 days free for monthly plan referral
+    } else if (newCustomerPlan == PlanType.weekly) {
+      return const Duration(days: 3); // 3 days free for weekly plan referral
+    } else {
+      return const Duration(days: 1); // 1 day free for daily plan referral
+    }
   }
 }

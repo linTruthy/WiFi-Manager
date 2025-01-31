@@ -12,7 +12,7 @@ class Payment {
 
   double amount;
   String customerId;
-  
+
   @Enumerated(EnumType.name)
   PlanType planType;
   bool isConfirmed;
@@ -44,15 +44,15 @@ class Payment {
   // Create Payment instance from JSON
   static Payment fromJson(Map<String, dynamic> json) {
     return Payment(
-      paymentDate: DateTime.parse(json['paymentDate'] as String),
-      amount: json['amount'] as double,
-      customerId: json['customerId'] as String,
-      planType: PlanType.values.firstWhere(
-        (e) => e.name == json['planType'],
-        orElse: () => PlanType.daily,
-      ),
-      isConfirmed: json['isConfirmed'] as bool,
-    )
+        paymentDate: DateTime.parse(json['paymentDate'] as String),
+        amount: json['amount'] as double,
+        customerId: json['customerId'] as String,
+        planType: PlanType.values.firstWhere(
+          (e) => e.name == json['planType'],
+          orElse: () => PlanType.daily,
+        ),
+        isConfirmed: json['isConfirmed'] as bool,
+      )
       ..id = json['id'] as int
       ..lastModified = DateTime.parse(json['lastModified'] as String);
   }
@@ -66,11 +66,13 @@ class Payment {
     bool? isConfirmed,
   }) {
     return Payment(
-      paymentDate: paymentDate ?? this.paymentDate,
-      amount: amount ?? this.amount,
-      customerId: customerId ?? this.customerId,
-      planType: planType ?? this.planType,
-      isConfirmed: isConfirmed ?? this.isConfirmed,
-    )..id = id;
+        paymentDate: paymentDate ?? this.paymentDate,
+        amount: amount ?? this.amount,
+        customerId: customerId ?? this.customerId,
+        planType: planType ?? this.planType,
+        isConfirmed: isConfirmed ?? this.isConfirmed,
+      )
+      ..id = id
+      ..lastModified = DateTime.now();
   }
 }

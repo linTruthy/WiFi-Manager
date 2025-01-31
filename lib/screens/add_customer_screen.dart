@@ -2,9 +2,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:isar/isar.dart';
 
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
+import '../database/models/referral_stats.dart';
 import '../providers/database_provider.dart';
 
 class AddCustomerScreen extends ConsumerStatefulWidget {
@@ -18,6 +20,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _contactController = TextEditingController();
+  final _referralCodeController = TextEditingController();
   PlanType _selectedPlan = PlanType.monthly;
 
   @override
@@ -55,6 +58,14 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _referralCodeController,
+              decoration: const InputDecoration(
+                labelText: 'Referral Code (Optional)',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<PlanType>(
@@ -100,6 +111,12 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         subscriptionStart: DateTime.now(),
         subscriptionEnd: _calculateEndDate(),
         planType: _selectedPlan,
+        referredBy:
+            _referralCodeController.text.isNotEmpty
+                ? await _getCustomerIdByReferralCode(
+                  _referralCodeController.text,
+                )
+                : null,
       );
 
       try {
@@ -110,15 +127,108 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           );
           Navigator.pop(context);
           ref.invalidate(activeCustomersProvider);
+          // Apply referral reward if applicable
+          if (customer.referredBy != null) {
+            await _applyReferralReward(customer.referredBy!, customer);
+          }
         }
       } catch (e, stackTrace) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:2261690070.
-          ).showSnackBar(SnackBar(content: SelectableText('Error saving customer: $e | $stackTrace'),duration: Duration(minutes: 2),));
+            // Suggested code may be subject to a license. Learn more: ~LicenseLog:2261690070.
+          ).showSnackBar(
+            SnackBar(
+              content: SelectableText(
+                'Error saving customer: $e | $stackTrace',
+              ),
+              duration: Duration(minutes: 2),
+            ),
+          );
         }
       }
+    }
+  }
+
+  Future<String?> _getCustomerIdByReferralCode(String referralCode) async {
+    final isar = await ref.read(databaseProvider).db;
+    final referrer =
+        await isar.customers
+            .filter()
+            .referralCodeEqualTo(referralCode)
+            .findFirst();
+
+    if (referrer != null) {
+      return referrer.id.toString(); // Return the referrer's ID
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid referral code. Please check and try again.'),
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _applyReferralReward(
+    String referrerId,
+    Customer newCustomer,
+  ) async {
+    final isar = await ref.read(databaseProvider).db;
+    final referrer = await isar.customers.get(int.parse(referrerId));
+
+    if (referrer != null && referrer.isActive) {
+      final rewardDuration = _calculateReferralReward(
+        referrer.planType,
+        newCustomer.planType,
+      );
+      referrer.subscriptionEnd = referrer.subscriptionEnd.add(rewardDuration);
+      referrer.referralRewardApplied = DateTime.now();
+
+      // Save referral stats
+      final referralStats = ReferralStats.fromDuration(
+        referrerId: referrerId,
+        referredCustomerId: newCustomer.id.toString(),
+        referralDate: DateTime.now(),
+        rewardDuration: rewardDuration,
+      );
+
+      await isar.writeTxn(() async {
+        await isar.customers.put(referrer);
+        await isar.referralStats.put(referralStats); // Save referral stats
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Referral reward applied: ${referrer.name} gets ${rewardDuration.inDays} days free!',
+            ),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Referrer not found or inactive.')),
+        );
+      }
+    }
+  }
+
+  Duration _calculateReferralReward(
+    PlanType referrerPlan,
+    PlanType newCustomerPlan,
+  ) {
+    // Define referral rewards based on plans
+    if (newCustomerPlan == PlanType.monthly) {
+      return const Duration(days: 7); // 7 days free for monthly plan referral
+    } else if (newCustomerPlan == PlanType.weekly) {
+      return const Duration(days: 3); // 3 days free for weekly plan referral
+    } else {
+      return const Duration(days: 1); // 1 day free for daily plan referral
     }
   }
 
