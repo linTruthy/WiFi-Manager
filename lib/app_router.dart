@@ -10,6 +10,9 @@ import 'package:wifi_manager/screens/expiring_subscriptions_screen.dart';
 import 'package:wifi_manager/screens/home_screen.dart';
 import 'package:wifi_manager/screens/payments_screen.dart';
 
+import 'screens/inactive_customers_screen.dart';
+import 'screens/login_screen.dart';
+
 class AppRouter {
   static Route<dynamic>? onGenerateRoute(
     RouteSettings settings,
@@ -17,19 +20,22 @@ class AppRouter {
   ) {
     // Extract route generation logic
     return switch (settings.name) {
-      final name when name?.startsWith('/customer/') ?? false => 
+      '/login' => MaterialPageRoute(builder: (_) => const LoginScreen()),
+      '/register' => MaterialPageRoute(builder: (_) => const RegisterScreen()),
+
+      final name when name?.startsWith('/customer/') ?? false =>
         MaterialPageRoute(
-          builder: (context) => _buildCustomerDetailScreen(
-            settings.name!.split('/').last,
-            ref,
-          ),
+          builder:
+              (context) => _buildCustomerDetailScreen(
+                settings.name!.split('/').last,
+                ref,
+              ),
         ),
       final name when name?.startsWith('/edit-customer/') ?? false =>
         MaterialPageRoute(
-          builder: (context) => _buildEditCustomerScreen(
-            settings.name!.split('/').last,
-            ref,
-          ),
+          builder:
+              (context) =>
+                  _buildEditCustomerScreen(settings.name!.split('/').last, ref),
         ),
       _ => null,
     };
@@ -66,14 +72,10 @@ class AppRouter {
     Widget Function(Customer) onData,
   ) {
     if (snapshot.connectionState == ConnectionState.waiting) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (!snapshot.hasData || snapshot.data == null) {
-      return const Scaffold(
-        body: Center(child: Text('Customer not found')),
-      );
+      return const Scaffold(body: Center(child: Text('Customer not found')));
     }
     return onData(snapshot.data!);
   }
@@ -89,10 +91,14 @@ class AppRouter {
 
   // Define static routes
   static final routes = {
-    '/': (context) => const HomeScreen(),
+    '/': (context) => const LoginScreen(),
+    '/login': (context) => const LoginScreen(),
+    '/register': (context) => const RegisterScreen(),
     '/customers': (context) => const CustomersScreen(),
     '/add-customer': (context) => const AddCustomerScreen(),
+    '/inactive-customers': (context) => const InactiveCustomersScreen(),
     '/payments': (context) => const PaymentsScreen(),
     '/expiring-subscriptions': (context) => const ExpiringSubscriptionsScreen(),
+    '/home': (context) => const HomeScreen(),
   };
 }

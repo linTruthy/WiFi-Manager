@@ -13,7 +13,17 @@ class CustomersScreen extends ConsumerWidget {
     final customersAsync = ref.watch(activeCustomersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Active Customers')),
+      appBar: AppBar(
+        title: const Text('Active Customers'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            onPressed: () {
+              Navigator.pushNamed(context, '/inactive-customers');
+            },
+          ),
+        ],
+      ),
       body: customersAsync.when(
         data:
             (customers) => ListView.builder(

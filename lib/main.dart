@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -13,6 +14,7 @@ import 'app_router.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'services/app_preferences.dart';
 import 'services/subscription_notification_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -119,12 +121,20 @@ void main() async {
   //   'syncTask',
   //   frequency: Duration(hours: 1),
   // );
-  final initialRoute = await _getInitialRoute();
+  // Determine the initial route
+  final isFirstTime = await AppPreferences.isFirstTime();
+  final initialRoute = isFirstTime ? '/register' : await _getInitialRoute();
+
   runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));
 }
 
 Future<String?> _getInitialRoute() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    return '/login';
+  }
   // Check if the app was launched from a notification
+
   final NotificationAppLaunchDetails? notificationAppLaunchDetails =
       await FlutterLocalNotificationsPlugin().getNotificationAppLaunchDetails();
 
@@ -135,16 +145,8 @@ Future<String?> _getInitialRoute() async {
       return '/customer/$payload';
     }
   }
-  return null; // Default route
+  return '/home'; // Default route
 }
-// @pragma('vm:entry-point')
-// void callbackDispatcher() {
-//   Workmanager().executeTask((task, inputData) async {
-//     final dbRepo = DatabaseRepository();
-//     await dbRepo.syncPendingChanges();
-//     return true;
-//   });
-// }
 
 Future<void> _configureLocalTimeZone() async {
   if (kIsWeb || Platform.isLinux) {

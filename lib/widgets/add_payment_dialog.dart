@@ -4,8 +4,12 @@ import 'package:isar/isar.dart';
 import '../database/models/payment.dart';
 import '../database/models/plan.dart';
 import '../database/models/customer.dart';
+import '../providers/customer_provider.dart';
 import '../providers/database_provider.dart';
+import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../providers/syncing_provider.dart';
 
 class AddPaymentDialog extends ConsumerStatefulWidget {
   const AddPaymentDialog({super.key});
@@ -145,16 +149,6 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
     }
   }
 
-  // String _generatePassword() {
-  //   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  //   final random = DateTime.now().millisecondsSinceEpoch;
-  //   final password =
-  //       List.generate(6, (index) {
-  //         return chars[random % chars.length];
-  //       }).join();
-  //   return password;
-  // }
-
   void _updateAmount() {
     switch (_selectedPlan) {
       case PlanType.daily:
@@ -198,8 +192,8 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             planType: _selectedPlan,
             isConfirmed: true,
           );
-          await isar.payments.put(payment);
-
+          //  await isar.payments.put(payment);
+          await ref.read(databaseProvider).savePayment(payment);
           // Update customer subscription details
           customer.subscriptionStart = _startDate;
           customer.subscriptionEnd = _calculateEndDate(
@@ -220,8 +214,8 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             customer.wifiName = Customer.generateWifiName(customer.name);
             customer.currentPassword = Customer.generate();
           }
-
-          await isar.customers.put(customer);
+          await ref.read(databaseProvider).saveCustomer(customer);
+          //  await isar.customers.put(customer);
         });
 
         if (mounted) {
@@ -231,7 +225,12 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
           ref.invalidate(filteredPaymentsProvider);
           ref.invalidate(activeCustomersProvider);
           ref.invalidate(expiringCustomersProvider);
+          ref.invalidate(syncingProvider);
 
+          ref.invalidate(databaseProvider);
+          ref.invalidate(customerProvider);
+          ref.invalidate(expiringSubscriptionsProvider);
+          ref.invalidate(notificationSchedulerProvider);
           // Show WiFi credentials in a dialog
           final customer = await isar.customers.get(
             int.parse(_selectedCustomerId!),

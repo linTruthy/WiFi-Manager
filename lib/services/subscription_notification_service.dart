@@ -104,13 +104,17 @@ class SubscriptionNotificationService {
 
   static Future<void> scheduleExpirationNotification(Customer customer) async {
     if (await _isNotificationScheduled(customer.id)) {
-      debugPrint('Notification already scheduled for ${customer.name}');
+      debugPrint(
+        'Notification already scheduled for ${customer.name.hashCode}',
+      );
       return;
     }
 
     final notificationTime = _calculateNotificationTime(customer);
     if (notificationTime.isBefore(tz.TZDateTime.now(tz.local))) {
-      debugPrint('Notification time is in the past for ${customer.name}');
+      debugPrint(
+        'Notification time is in the past for ${customer.name.hashCode}',
+      );
       return;
     }
 
@@ -128,10 +132,69 @@ class SubscriptionNotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
         payload: customer.id.toString(),
       );
+      await _saveScheduledNotification(customer, notificationTime);
       await _markNotificationScheduled(customer.id, notificationTime);
       debugPrint('Scheduled notification for ${customer.name}');
     } catch (e) {
       debugPrint('Failed to schedule notification: $e');
+    }
+  }
+
+  static Future<void> _saveScheduledNotification(
+    Customer customer,
+    tz.TZDateTime notificationTime,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final scheduledNotificationsString =
+        prefs.getString('scheduled_notifications') ?? '{}';
+    final notifications =
+        json.decode(scheduledNotificationsString) as Map<String, dynamic>;
+
+    notifications[customer.id.toString()] = {
+      'customerId': customer.id.toString(),
+      'customerName': customer.name,
+      // 'phone': customer.phone,
+      // 'email': customer.email,
+      'notificationTime': notificationTime.toIso8601String(),
+      'message': _generateMessage(customer),
+      //'status': 'scheduled', // Add status tracking
+    };
+
+    await prefs.setString(
+      'scheduled_notifications',
+      json.encode(notifications),
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getScheduledNotifications() async {
+    final prefs = await SharedPreferences.getInstance();
+    final scheduledNotificationsString = prefs.getString(
+      'scheduled_notifications',
+    );
+
+    if (scheduledNotificationsString == null) {
+      return [];
+    }
+
+    try {
+      final Map<String, dynamic> decoded = json.decode(
+        scheduledNotificationsString,
+      );
+
+      return decoded.values.map<Map<String, dynamic>>((notification) {
+        return {
+          'customerId': int.parse(notification['customerId'].toString()),
+          'customerName': notification['customerName'],
+          // 'phone': notification['phone'],
+          // 'email': notification['email'],
+          'notificationTime': DateTime.parse(notification['notificationTime']),
+          'message': notification['message'],
+          //   'status': notification['status'] ?? 'scheduled',
+        };
+      }).toList();
+    } catch (e) {
+      print('Decoding error: $e');
+      return [];
     }
   }
 
@@ -192,7 +255,6 @@ class SubscriptionNotificationService {
   }
 
   static tz.TZDateTime _calculateNotificationTime(Customer customer) {
-    final now = tz.TZDateTime.now(tz.local);
     final end = tz.TZDateTime.from(customer.subscriptionEnd, tz.local);
 
     // Notification scheduling logic based on plan type

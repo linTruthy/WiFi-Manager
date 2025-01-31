@@ -10,6 +10,8 @@ import '../providers/notification_schedule_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/syncing_provider.dart';
 import '../widgets/expiring_subscriptions_banner.dart';
+import 'login_screen.dart';
+import 'scheduled_reminders_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -53,6 +55,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.read(authServiceProvider);
+    final user = authService.currentUser;
+
+    if (user == null) {
+      return const LoginScreen();
+    }
+    
     ref.watch(notificationSchedulerProvider);
     ref.read(databaseProvider).syncPendingChanges();
     final isSyncing = ref.watch(syncingProvider);
@@ -63,7 +72,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         title: 'Truthy WiFi Manager',
         onNotificationTap: () {
           // Handle notifications
-          Navigator.pushNamed(context, '/expiring-subscriptions');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ScheduledRemindersScreen(),
+            ),
+          );
         },
       ),
       body: Stack(
@@ -273,6 +287,7 @@ class _GlassmorphicAppBar extends ConsumerWidget
                   ),
                 ),
                 const Spacer(),
+
                 Stack(
                   children: [
                     IconButton(
@@ -325,6 +340,15 @@ class _GlassmorphicAppBar extends ConsumerWidget
                       error: (_, __) => const SizedBox.shrink(),
                     ),
                   ],
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () async {
+                    final authService = ref.read(authServiceProvider);
+                    await authService.signOut();
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
                 ),
                 const SizedBox(width: 8),
               ],

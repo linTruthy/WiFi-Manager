@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
+import '../providers/customer_provider.dart';
 import '../providers/database_provider.dart';
 
 class EditCustomerScreen extends ConsumerStatefulWidget {
@@ -168,6 +169,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
           );
           Navigator.pop(context);
           ref.invalidate(activeCustomersProvider);
+          ref.invalidate(inactiveCustomersProvider);
         }
       } catch (e) {
         if (mounted) {

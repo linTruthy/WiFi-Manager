@@ -3,11 +3,15 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
+import 'package:wifi_manager/providers/customer_provider.dart';
+import 'package:wifi_manager/providers/notification_schedule_provider.dart';
+import 'package:wifi_manager/providers/syncing_provider.dart';
 
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
 import '../database/models/referral_stats.dart';
 import '../providers/database_provider.dart';
+import '../providers/subscription_provider.dart';
 
 class AddCustomerScreen extends ConsumerStatefulWidget {
   const AddCustomerScreen({super.key});
@@ -132,6 +136,12 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             await _applyReferralReward(customer.referredBy!, customer);
           }
         }
+        ref.invalidate(syncingProvider);
+        ref.invalidate(activeCustomersProvider);
+        ref.invalidate(databaseProvider);
+        ref.invalidate(customerProvider);
+        ref.invalidate(expiringSubscriptionsProvider);
+        ref.invalidate(notificationSchedulerProvider);
       } catch (e, stackTrace) {
         if (mounted) {
           ScaffoldMessenger.of(
