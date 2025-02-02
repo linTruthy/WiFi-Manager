@@ -1,9 +1,7 @@
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 //import 'package:workmanager/workmanager.dart';
@@ -14,7 +12,7 @@ import 'app_router.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-import 'services/app_preferences.dart';
+import 'services/auth_service.dart';
 import 'services/subscription_notification_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -112,44 +110,16 @@ void main() async {
   await Future.wait([SubscriptionNotificationService.initialize()]);
 
   await SubscriptionNotificationService.clearExpiredNotifications();
-  // Wait for the user to authenticate
-  final auth = FirebaseAuth.instance;
-  User? user = auth.currentUser;
-  // // Initialize database and schedule notifications
-  // final dbRepo = DatabaseRepository();
-  // await dbRepo.scheduleNotifications();
+  final authService = AuthService();
+  final initialRoute = await authService.getInitialRoute();
 
-  if (user == null) {
-    runApp(ProviderScope(child: MyApp(initialRoute: '/login')));
-  } else {
-    final isFirstTime = await AppPreferences.isFirstTime();
-    final initialRoute = isFirstTime ? '/register' : await _getInitialRoute();
-    // If the user is authenticated, proceed with Firestore operations
+  if (initialRoute == '/home') {
     final dbRepo = DatabaseRepository();
     await dbRepo.scheduleNotifications();
-    runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));
   }
+  runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));
 }
 
-Future<String?> _getInitialRoute() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) {
-    return '/login';
-  }
-  // Check if the app was launched from a notification
-
-  final NotificationAppLaunchDetails? notificationAppLaunchDetails =
-      await FlutterLocalNotificationsPlugin().getNotificationAppLaunchDetails();
-
-  if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
-    final payload = notificationAppLaunchDetails!.notificationResponse?.payload;
-    if (payload != null) {
-      // Example payload: "customerId=123"
-      return '/customer/$payload';
-    }
-  }
-  return '/home'; // Default route
-}
 
 Future<void> _configureLocalTimeZone() async {
   if (kIsWeb || Platform.isLinux) {
