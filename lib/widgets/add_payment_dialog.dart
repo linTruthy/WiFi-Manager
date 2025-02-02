@@ -4,6 +4,7 @@ import 'package:isar/isar.dart';
 import '../database/models/payment.dart';
 import '../database/models/plan.dart';
 import '../database/models/customer.dart';
+import '../database/models/sync_status.dart';
 import '../providers/customer_provider.dart';
 import '../providers/database_provider.dart';
 import '../providers/notification_schedule_provider.dart';
@@ -193,7 +194,17 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             isConfirmed: true,
           );
           //  await isar.payments.put(payment);
-          await ref.read(databaseProvider).savePayment(payment);
+          await isar.payments.put(payment);
+          await isar.syncStatus.put(
+            SyncStatus(
+              entityId: payment.id,
+              entityType: 'payment',
+              operation: 'save',
+              timestamp: DateTime.now(),
+            ),
+          );
+          await ref.read(databaseProvider).pushPayment(payment);
+          // await ref.read(databaseProvider).savePayment(payment);
           // Update customer subscription details
           customer.subscriptionStart = _startDate;
           customer.subscriptionEnd = _calculateEndDate(
@@ -214,7 +225,17 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             customer.wifiName = Customer.generateWifiName(customer.name);
             customer.currentPassword = Customer.generate();
           }
-          await ref.read(databaseProvider).saveCustomer(customer);
+          await isar.customers.put(customer);
+          await isar.syncStatus.put(
+            SyncStatus(
+              entityId: customer.id,
+              entityType: 'customer',
+              operation: 'save',
+              timestamp: DateTime.now(),
+            ),
+          );
+          await ref.read(databaseProvider).pushCustomer(customer);
+          //   await ref.read(databaseProvider).saveCustomer(customer);
           //  await isar.customers.put(customer);
         });
 

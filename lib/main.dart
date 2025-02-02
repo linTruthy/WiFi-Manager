@@ -112,20 +112,23 @@ void main() async {
   await Future.wait([SubscriptionNotificationService.initialize()]);
 
   await SubscriptionNotificationService.clearExpiredNotifications();
-  // Initialize database and schedule notifications
-  final dbRepo = DatabaseRepository();
-  await dbRepo.scheduleNotifications();
-  // Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-  // Workmanager().registerPeriodicTask(
-  //   'syncTaskIdentifier',
-  //   'syncTask',
-  //   frequency: Duration(hours: 1),
-  // );
-  // Determine the initial route
-  final isFirstTime = await AppPreferences.isFirstTime();
-  final initialRoute = isFirstTime ? '/register' : await _getInitialRoute();
+  // Wait for the user to authenticate
+  final auth = FirebaseAuth.instance;
+  User? user = auth.currentUser;
+  // // Initialize database and schedule notifications
+  // final dbRepo = DatabaseRepository();
+  // await dbRepo.scheduleNotifications();
 
-  runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));
+  if (user == null) {
+    runApp(ProviderScope(child: MyApp(initialRoute: '/login')));
+  } else {
+    final isFirstTime = await AppPreferences.isFirstTime();
+    final initialRoute = isFirstTime ? '/register' : await _getInitialRoute();
+    // If the user is authenticated, proceed with Firestore operations
+    final dbRepo = DatabaseRepository();
+    await dbRepo.scheduleNotifications();
+    runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));
+  }
 }
 
 Future<String?> _getInitialRoute() async {

@@ -1,1 +1,25 @@
-{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"flutter":{"platforms":{"android":{"default":{"projectId":"truthy-wifi-manager","appId":"1:391437135862:android:19b72a576bafd2228f61d7","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"truthy-wifi-manager","configurations":{"android":"1:391437135862:android:19b72a576bafd2228f61d7"}}}}}}
+{
+    "firestore": {
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
+    },
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "truthy-wifi-manager",
+                    "appId": "1:391437135862:android:19b72a576bafd2228f61d7",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "truthy-wifi-manager",
+                    "configurations": {
+                        "android": "1:391437135862:android:19b72a576bafd2228f61d7"
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,364 +1,3 @@
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:isar/isar.dart';
-// import 'package:path_provider/path_provider.dart';
-// import 'package:connectivity_plus/connectivity_plus.dart';
-
-// import '../../services/subscription_notification_service.dart';
-// import '../models/customer.dart';
-// import '../models/payment.dart';
-// import '../models/plan.dart';
-// import '../models/referral_stats.dart';
-// import '../models/sync_status.dart';
-
-// /// Repository that handles both local (Isar) and cloud (Firestore) storage
-// class DatabaseRepository {
-//   late Future<Isar> db;
-//   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-//   final Connectivity _connectivity = Connectivity();
-
-//   // Collection references
-//   static const String _customersCollection = 'customers';
-//   static const String _paymentsCollection = 'payments';
-//   bool _isSyncing = false;
-//   bool get isSyncing => _isSyncing;
-
-//   DatabaseRepository() {
-//     db = openDB();
-//     _initializeSync();
-//   }
-
-//   Future<void> _initializeSync() async {
-//     // Listen for connectivity changes
-//     _connectivity.onConnectivityChanged.listen((result) {
-//       if (result.contains(ConnectivityResult.mobile) ||
-//           result.contains(ConnectivityResult.wifi)) {
-//         syncPendingChanges();
-//       }
-//     });
-//   }
-
-//   Future<Isar> openDB() async {
-//     if (Isar.instanceNames.isEmpty) {
-//       final dir = await getApplicationDocumentsDirectory();
-//       return await Isar.open(
-//         [
-//           CustomerSchema,
-//           PlanSchema,
-//           PaymentSchema,
-//           SyncStatusSchema,
-//           ReferralStatsSchema,
-//         ],
-//         directory: dir.path,
-//         name: 'wifi_manager',
-//       );
-//     }
-
-//     // Get existing instance with the specific name
-//     final isar = Isar.getInstance('wifi_manager');
-//     if (isar != null) {
-//       return isar;
-//     }
-
-//     // If instance with name doesn't exist, create new one
-//     final dir = await getApplicationDocumentsDirectory();
-//     return await Isar.open(
-//       [CustomerSchema, PlanSchema, PaymentSchema, SyncStatusSchema],
-//       directory: dir.path,
-//       name: 'wifi_manager',
-//     );
-//   }
-
-//   // Customer operations with sync
-//   Future<void> saveCustomer(Customer customer) async {
-//     final isar = await db;
-//     await isar.writeTxn(() async {
-//       await isar.customers.put(customer);
-//       // Mark for sync
-//       await isar.syncStatus.put(
-//         SyncStatus(
-//           entityId: customer.id,
-//           entityType: 'customer',
-//           operation: 'save',
-//           timestamp: DateTime.now(),
-//         ),
-//       );
-//     });
-
-//     // Try immediate sync if online
-//     if (await _isOnline()) {
-//       await _syncCustomerToFirestore(customer);
-//     }
-//   }
-
-//   Future<void> deleteCustomer(Id customerId) async {
-//     final isar = await db;
-//     await isar.writeTxn(() async {
-//       await isar.customers.delete(customerId);
-//       await isar.syncStatus.put(
-//         SyncStatus(
-//           entityId: customerId,
-//           entityType: 'customer',
-//           operation: 'delete',
-//           timestamp: DateTime.now(),
-//         ),
-//       );
-//     });
-
-//     if (await _isOnline()) {
-//       await _firestore
-//           .collection(_customersCollection)
-//           .doc(customerId.toString())
-//           .delete();
-//     }
-//   }
-
-//   Future<List<Customer>> getActiveCustomers() async {
-//     final isar = await db;
-//     final customers =
-//         await isar.customers.filter().isActiveEqualTo(true).findAll();
-
-//     // If online, merge with cloud data
-//     if (await _isOnline()) {
-//       await _mergeCloudCustomers();
-//     }
-
-//     return customers;
-//   }
-
-//   // Payment operations with sync
-//   Future<void> savePayment(Payment payment) async {
-//     final isar = await db;
-//     await isar.writeTxn(() async {
-//       await isar.payments.put(payment);
-//       await isar.syncStatus.put(
-//         SyncStatus(
-//           entityId: payment.id,
-//           entityType: 'payment',
-//           operation: 'save',
-//           timestamp: DateTime.now(),
-//         ),
-//       );
-//     });
-
-//     if (await _isOnline()) {
-//       await _syncPaymentToFirestore(payment);
-//     }
-//   }
-
-//   // Sync operations
-//   Future<void> syncPendingChanges() async {
-//     if (!await _isOnline()) return;
-//     setSyncing(true); // Start syncing
-//     final isar = await db;
-//     final pendingSync = await isar.syncStatus.where().findAll();
-//     for (final status in pendingSync) {
-//       try {
-//         if (status.entityType == 'customer') {
-//           final customer = await isar.customers.get(status.entityId);
-//           if (customer != null) {
-//             await _syncCustomerToFirestore(customer);
-//           }
-//         } else if (status.entityType == 'payment') {
-//           final payment = await isar.payments.get(status.entityId);
-//           if (payment != null) {
-//             await _syncPaymentToFirestore(payment);
-//           }
-//         }
-//         await isar.writeTxn(() async {
-//           await isar.syncStatus.delete(status.id);
-//         });
-//       } catch (e) {
-//         print('Error syncing ${status.entityType} ${status.entityId}: $e');
-//       }
-//     }
-//     setSyncing(false); // Stop syncing
-//   }
-
-//   void setSyncing(bool isSyncing) {
-//     _isSyncing = isSyncing;
-//     // Notify listeners if using a state management approach that supports it
-//   }
-
-//   Future<double> calculateActiveCustomerTrend() async {
-//     final isar = await db;
-//     final now = DateTime.now();
-//     final currentMonthStart = DateTime(now.year, now.month, 1);
-//     final previousMonthStart = DateTime(now.year, now.month - 1, 1);
-
-//     // Get active customers for the current month
-//     final currentMonthCustomers =
-//         await isar.customers
-//             .filter()
-//             .isActiveEqualTo(true)
-//             .subscriptionStartLessThan(currentMonthStart)
-//             .findAll();
-
-//     // Get active customers for the previous month
-//     final previousMonthCustomers =
-//         await isar.customers
-//             .filter()
-//             .isActiveEqualTo(true)
-//             .subscriptionStartLessThan(previousMonthStart)
-//             .findAll();
-
-//     if (previousMonthCustomers.isEmpty) {
-//       return 0.0; // No trend if there were no customers last month
-//     }
-
-//     // Calculate percentage change
-//     final currentCount = currentMonthCustomers.length;
-//     final previousCount = previousMonthCustomers.length;
-//     final trend = ((currentCount - previousCount) / previousCount) * 100;
-
-//     return trend;
-//   }
-
-//   Future<List<ReferralStats>> getReferralStats(String referrerId) async {
-//     final isar = await db;
-//     return await isar.referralStats
-//         .filter()
-//         .referrerIdEqualTo(referrerId)
-//         .findAll();
-//   }
-
-//   Future<void> saveReferralStats(ReferralStats referralStats) async {
-//     final isar = await db;
-//     await isar.writeTxn(() async {
-//       await isar.referralStats.put(referralStats);
-//     });
-//   }
-
-//   Future<int> getTotalReferrals(String referrerId) async {
-//     final isar = await db;
-//     return await isar.referralStats
-//         .filter()
-//         .referrerIdEqualTo(referrerId)
-//         .count();
-//   }
-
-//   Future<Duration> getTotalRewardDuration(String referrerId) async {
-//     final isar = await db;
-//     final referrals =
-//         await isar.referralStats
-//             .filter()
-//             .referrerIdEqualTo(referrerId)
-//             .findAll();
-
-//     Duration totalReward = Duration.zero;
-
-//     for (final referral in referrals) {
-//       final rewardDuration = Duration(
-//         milliseconds: referral.rewardDurationMillis,
-//       );
-//       totalReward += rewardDuration;
-//     }
-//     return totalReward;
-//   }
-
-//   Future<void> _mergeCloudCustomers() async {
-//     final isar = await db;
-//     final snapshot = await _firestore.collection(_customersCollection).get();
-
-//     await isar.writeTxn(() async {
-//       for (final doc in snapshot.docs) {
-//         final cloudCustomer = Customer.fromJson(doc.data());
-//         final localCustomer = await isar.customers.get(cloudCustomer.id);
-
-//         if (localCustomer == null ||
-//             cloudCustomer.lastModified.isAfter(localCustomer.lastModified)) {
-//           await isar.customers.put(cloudCustomer);
-//         }
-//       }
-//     });
-//   }
-
-//   Future<void> _syncCustomerToFirestore(Customer customer) async {
-//     await _firestore
-//         .collection(_customersCollection)
-//         .doc(customer.id.toString())
-//         .set(customer.toJson());
-//   }
-
-//   Future<void> _syncPaymentToFirestore(Payment payment) async {
-//     try {
-//       await _firestore
-//           .collection(_paymentsCollection)
-//           .doc(payment.id.toString())
-//           .set(payment.toJson());
-//       print('Customer ${payment.id} synced to Firestore');
-//     } on Exception catch (e) {
-//       print('Error syncing customer ${payment.id} to Firestore: $e');
-//     }
-//   }
-
-//   Future<bool> _isOnline() async {
-//     final result = await _connectivity.checkConnectivity();
-
-//     return result.contains(ConnectivityResult.wifi) ||
-//         result.contains(ConnectivityResult.mobile);
-//   }
-
-//   Future<List<Customer>> getExpiringCustomers() async {
-//     final tomorrow = DateTime.now().add(const Duration(days: 1));
-//     final isar = await db;
-//     return await isar.customers
-//         .filter()
-//         .isActiveEqualTo(true)
-//         .subscriptionEndLessThan(tomorrow)
-//         .findAll();
-//   }
-
-//   Future<List<Customer>> getCustomersExpiringBefore(DateTime date) async {
-//     final isar = await db;
-//     return await isar.customers
-//         .filter()
-//         .isActiveEqualTo(true)
-//         .subscriptionEndLessThan(date)
-//         .findAll();
-//   }
-
-//   Future<List<Payment>> getRecentPayments() async {
-//     final isar = await db;
-//     return await isar.payments
-//         .filter()
-//         .paymentDateGreaterThan(
-//           DateTime.now().subtract(const Duration(days: 30)),
-//         )
-//         .findAll();
-//   }
-
-//   // Bulk operations
-//   Future<void> deleteAllRecords() async {
-//     final isar = await db;
-//     await isar.writeTxn(() async {
-//       await isar.customers.where().deleteAll();
-//       await isar.payments.where().deleteAll();
-//       await isar.syncStatus.where().deleteAll();
-//     });
-
-//     if (await _isOnline()) {
-//       // Delete all cloud records
-//       final customerBatch = _firestore.batch();
-//       final paymentBatch = _firestore.batch();
-
-//       final customerDocs =
-//           await _firestore.collection(_customersCollection).get();
-//       final paymentDocs =
-//           await _firestore.collection(_paymentsCollection).get();
-
-//       for (final doc in customerDocs.docs) {
-//         customerBatch.delete(doc.reference);
-//       }
-//       for (final doc in paymentDocs.docs) {
-//         paymentBatch.delete(doc.reference);
-//       }
-
-//       await customerBatch.commit();
-//       await paymentBatch.commit();
-//     }
-//   }
-// }
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:isar/isar.dart';
@@ -374,7 +13,7 @@ import '../models/sync_status.dart';
 class DatabaseRepository {
   late Future<Isar> db;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // final FirebaseAuth _auth = FirebaseAuth.instance;
   final Connectivity _connectivity = Connectivity();
   bool _isSyncing = false;
 
@@ -423,7 +62,7 @@ class DatabaseRepository {
 
   // Get the current user's Firestore collection path
   String _getUserCollectionPath(String collection) {
-    final user = _auth.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw Exception('User not authenticated');
     }
@@ -443,7 +82,7 @@ class DatabaseRepository {
         ),
       );
     });
-    if (await _isOnline()) {
+    if (await isOnline()) {
       await _firestore
           .collection(_getUserCollectionPath('customers'))
           .doc(customer.id.toString())
@@ -464,7 +103,7 @@ class DatabaseRepository {
         ),
       );
     });
-    if (await _isOnline()) {
+    if (await isOnline()) {
       await _firestore
           .collection(_getUserCollectionPath('customers'))
           .doc(customerId.toString())
@@ -476,7 +115,7 @@ class DatabaseRepository {
     final isar = await db;
     final customers =
         await isar.customers.filter().isActiveEqualTo(true).findAll();
-    if (await _isOnline()) {
+    if (await isOnline()) {
       await _mergeCloudCustomers();
     }
     return customers;
@@ -522,7 +161,7 @@ class DatabaseRepository {
       );
     });
 
-    if (await _isOnline()) {
+    if (await isOnline()) {
       // Delete from Firestore
       await _firestore
           .collection(_getUserCollectionPath('customers'))
@@ -566,7 +205,7 @@ class DatabaseRepository {
         ),
       );
     });
-    if (await _isOnline()) {
+    if (await isOnline()) {
       await _firestore
           .collection(_getUserCollectionPath('payments'))
           .doc(payment.id.toString())
@@ -575,7 +214,7 @@ class DatabaseRepository {
   }
 
   Future<void> syncPendingChanges() async {
-    if (!await _isOnline()) return;
+    if (!await isOnline()) return;
     setSyncing(true);
     final isar = await db;
     final pendingSync = await isar.syncStatus.where().findAll();
@@ -673,6 +312,12 @@ class DatabaseRepository {
   }
 
   Future<void> _mergeCloudCustomers() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print('User not authenticated. Skipping Firestore sync.');
+      return;
+    }
+
     final isar = await db;
     final snapshot =
         await _firestore.collection(_getUserCollectionPath('customers')).get();
@@ -712,7 +357,7 @@ class DatabaseRepository {
     }
   }
 
-  Future<bool> _isOnline() async {
+  Future<bool> isOnline() async {
     final result = await _connectivity.checkConnectivity();
     return result.contains(ConnectivityResult.wifi) ||
         result.contains(ConnectivityResult.mobile);
@@ -754,7 +399,7 @@ class DatabaseRepository {
       await isar.payments.where().deleteAll();
       await isar.syncStatus.where().deleteAll();
     });
-    if (await _isOnline()) {
+    if (await isOnline()) {
       final customerBatch = _firestore.batch();
       final paymentBatch = _firestore.batch();
       final customerDocs =
@@ -773,11 +418,34 @@ class DatabaseRepository {
       await paymentBatch.commit();
     }
   }
+
+  pushPayment(Payment payment) async {
+    if (await isOnline()) {
+      await _firestore
+          .collection(_getUserCollectionPath('payments'))
+          .doc(payment.id.toString())
+          .set(payment.toJson());
+    }
+  }
+
+  pushCustomer(Customer customer) async {
+    if (await isOnline()) {
+      await _firestore
+          .collection(_getUserCollectionPath('customers'))
+          .doc(customer.id.toString())
+          .set(customer.toJson());
+    }
+  }
 }
 
 // Extension for notifications remains the same
 extension NotificationExtension on DatabaseRepository {
   Future<void> scheduleNotifications() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print('User not authenticated. Skipping notifications.');
+      return;
+    }
     await Future.wait([scheduleExpirationNotifications()]);
   }
 
