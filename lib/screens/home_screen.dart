@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/active_customer_trend_provider.dart';
 import '../providers/database_provider.dart';
 import '../providers/notification_schedule_provider.dart';
+import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/syncing_provider.dart';
+import '../services/subscription_widget_service.dart';
 import '../widgets/expiring_subscriptions_banner.dart';
 import 'login_screen.dart';
 import 'scheduled_reminders_screen.dart';
@@ -61,10 +63,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (user == null) {
       return const LoginScreen();
     }
-    
+    ref.invalidate(recentPaymentsProvider);
+    ref.invalidate(paymentSummaryProvider);
+    ref.invalidate(filteredPaymentsProvider);
+    ref.invalidate(activeCustomersProvider);
+    ref.invalidate(expiringCustomersProvider);
+    ref.invalidate(syncingProvider);
+    ref.invalidate(expiringSubscriptionsProvider);
     ref.watch(notificationSchedulerProvider);
+
     ref.read(databaseProvider).syncPendingChanges();
     final isSyncing = ref.watch(syncingProvider);
+
+    final activeCustomers = ref.watch(activeCustomersProvider);
+
+    ref.listen(expiringSubscriptionsProvider, (previous, next) {
+      next.whenData((customers) {
+        activeCustomers.whenData((activeCount) {
+          SubscriptionWidgetService.updateWidgetData(
+            customers,
+            activeCount.length,
+          );
+        });
+      });
+    });
+
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       extendBodyBehindAppBar: true,
