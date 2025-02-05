@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:isar/isar.dart';
 import '../database/models/payment.dart';
 import '../database/models/plan.dart';
@@ -68,14 +69,15 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                 onTap: () => _selectStartDate(context),
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Start Date',
+                    labelText: 'Start Date and Time',
                     border: OutlineInputBorder(),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}',
+                        DateFormat('yyyy-MM-dd hh:mm a').format(_startDate),
+                        //'${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}',
                       ),
                       const Icon(Icons.calendar_today),
                     ],
@@ -137,16 +139,37 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
   }
 
   Future<void> _selectStartDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+    final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: _startDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 7)),
-      lastDate: DateTime.now().add(const Duration(days: 7)),
+      firstDate: DateTime.now().subtract(const Duration(days: 14)),
+      lastDate: DateTime.now().add(const Duration(days: 14)),
     );
-    if (picked != null && picked != _startDate) {
-      setState(() {
-        _startDate = picked;
-      });
+
+    if (pickedDate != null) {
+      // Show time picker after date is selected
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_startDate),
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+            child: child!,
+          );
+        },
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          _startDate = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+        });
+      }
     }
   }
 
@@ -204,8 +227,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             ),
           );
           await ref.read(databaseProvider).pushPayment(payment);
-          // await ref.read(databaseProvider).savePayment(payment);
-          // Update customer subscription details
+
           customer.subscriptionStart = _startDate;
           customer.subscriptionEnd = _calculateEndDate(
             _startDate,
@@ -235,8 +257,6 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             ),
           );
           await ref.read(databaseProvider).pushCustomer(customer);
-          //   await ref.read(databaseProvider).saveCustomer(customer);
-          //  await isar.customers.put(customer);
         });
 
         if (mounted) {

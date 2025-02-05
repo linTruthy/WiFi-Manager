@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -235,7 +236,9 @@ class DatabaseRepository {
           await isar.syncStatus.delete(status.id);
         });
       } catch (e) {
-        print('Error syncing ${status.entityType} ${status.entityId}: $e');
+        if (kDebugMode) {
+          print('Error syncing ${status.entityType} ${status.entityId}: $e');
+        }
       }
     }
     setSyncing(false);
@@ -314,7 +317,9 @@ class DatabaseRepository {
   Future<void> _mergeCloudCustomers() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      print('User not authenticated. Skipping Firestore sync.');
+      if (kDebugMode) {
+        print('User not authenticated. Skipping Firestore sync.');
+      }
       return;
     }
 
@@ -339,9 +344,13 @@ class DatabaseRepository {
           .collection(_getUserCollectionPath('customers'))
           .doc(customer.id.toString())
           .set(customer.toJson());
-      print('Customer ${customer.name} synced to Firestore');
+      if (kDebugMode) {
+        print('Customer ${customer.name} synced to Firestore');
+      }
     } on Exception catch (e) {
-      print('Error syncing customer ${customer.name} to Firestore: $e');
+      if (kDebugMode) {
+        print('Error syncing customer ${customer.name} to Firestore: $e');
+      }
     }
   }
 
@@ -351,9 +360,13 @@ class DatabaseRepository {
           .collection(_getUserCollectionPath('payments'))
           .doc(payment.id.toString())
           .set(payment.toJson());
-      print('Customer ${payment.id} synced to Firestore');
+      if (kDebugMode) {
+        print('Customer ${payment.id} synced to Firestore');
+      }
     } on Exception catch (e) {
-      print('Error syncing customer ${payment.id} to Firestore: $e');
+      if (kDebugMode) {
+        print('Error syncing customer ${payment.id} to Firestore: $e');
+      }
     }
   }
 
@@ -443,7 +456,9 @@ extension NotificationExtension on DatabaseRepository {
   Future<void> scheduleNotifications() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      print('User not authenticated. Skipping notifications.');
+      if (kDebugMode) {
+        print('User not authenticated. Skipping notifications.');
+      }
       return;
     }
     await Future.wait([scheduleExpirationNotifications()]);

@@ -149,7 +149,7 @@ class ReceiptService {
                         ),
                         _buildInfoRow(
                           'Subscription Period',
-                          '${DateFormat('MMM d, y').format(customer.subscriptionStart)} - ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}',
+                          '${DateFormat('MMM d, y').format(customer.subscriptionStart)} - ${DateFormat('MMM d, y hh:mm a').format(customer.subscriptionEnd)}',
                           labelStyle,
                           valueStyle,
                         ),

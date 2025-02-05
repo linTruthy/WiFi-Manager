@@ -2,7 +2,6 @@
 import 'package:isar/isar.dart';
 part 'plan.g.dart';
 
-@Enumerated(EnumType.name)
 enum PlanType {
   daily,
   weekly,

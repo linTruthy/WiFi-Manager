@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wifi_manager/database/repository/database_repository.dart';
 
 import '../providers/active_customer_trend_provider.dart';
 import '../providers/database_provider.dart';
@@ -71,8 +72,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ref.invalidate(syncingProvider);
     ref.invalidate(expiringSubscriptionsProvider);
     ref.watch(notificationSchedulerProvider);
+    ref.watch(scheduledNotificationsProvider);
+    
+
 
     ref.read(databaseProvider).syncPendingChanges();
+    ref.read(databaseProvider).scheduleNotifications();
+
     final isSyncing = ref.watch(syncingProvider);
 
     final activeCustomers = ref.watch(activeCustomersProvider);

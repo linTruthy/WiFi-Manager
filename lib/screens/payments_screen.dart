@@ -178,7 +178,7 @@ class _PaymentListTile extends ConsumerWidget {
         error: (_, __) => const Text('Unknown Customer'),
       ),
       subtitle: Text(
-        '${payment.planType.name} - ${DateFormat('MMM d, y').format(payment.paymentDate)}',
+        '${payment.planType.name} - ${DateFormat('MMM d, y - h:mm a').format(payment.paymentDate)}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

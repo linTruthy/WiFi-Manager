@@ -66,7 +66,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Subscription expires in $daysUntilExpiry days',
+                        'Subscription expires in ${_formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry)}',
                         style: const TextStyle(color: Colors.orange),
                       ),
                     ),
@@ -103,12 +103,23 @@ class CustomerDetailScreen extends ConsumerWidget {
                   const Divider(),
                   _buildDetailRow(
                     'Subscription Start',
-                    DateFormat('MMM d, y').format(customer.subscriptionStart),
+                    DateFormat(
+                      'MMM d, y - hh:mm a',
+                    ).format(customer.subscriptionStart),
                   ),
                   const Divider(),
                   _buildDetailRow(
                     'Subscription End',
-                    DateFormat('MMM d, y').format(customer.subscriptionEnd),
+                    _formatExpiryTime(
+                      customer.subscriptionEnd,
+                      daysUntilExpiry,
+                    ),
+                  ),
+                  _buildDetailRow(
+                    '',
+                    DateFormat(
+                      'MMM d, y - hh:mm a',
+                    ).format(customer.subscriptionEnd),
                   ),
                 ],
               ),
@@ -177,6 +188,30 @@ class CustomerDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _formatExpiryTime(DateTime subscriptionEnd, int daysUntilExpiry) {
+    final now = DateTime.now();
+    final difference = subscriptionEnd.difference(now);
+
+    if (daysUntilExpiry > 0) {
+      // Positive days - standard display
+      return DateFormat('MMM d, y').format(subscriptionEnd);
+    } else if (difference.inHours.abs() < 24) {
+      // Less than a day (hours)
+      final hours = difference.inHours.abs();
+      final prefix = difference.isNegative ? 'Expired' : 'Expires';
+      return '$prefix in $hours hour${hours != 1 ? 's' : ''}';
+    } else if (difference.inMinutes.abs() < 60) {
+      // Less than an hour (minutes)
+      final minutes = difference.inMinutes.abs();
+      final prefix = difference.isNegative ? 'Expired' : 'Expires';
+      return '$prefix in $minutes minute${minutes != 1 ? 's' : ''}';
+    } else {
+      // More than a day past expiration
+      final expiredDays = (-daysUntilExpiry).abs();
+      return 'Expired $expiredDays day${expiredDays != 1 ? 's' : ''} ago';
+    }
   }
 
   void _shareReferralCode(BuildContext context, String referralCode) {

@@ -40,8 +40,7 @@ class ExpiringSubscriptionsScreen extends ConsumerWidget {
                           ),
                           title: Text(customer.name),
                           subtitle: Text(
-                            'Expires: ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}\n'
-                            'Plan: ${customer.planType.name}',
+                            '${_formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry)}\n${DateFormat('MMM dd, yyyy - hh:mm a').format(customer.subscriptionEnd)}\nPlan: ${customer.planType.name}',
                           ),
                           isThreeLine: true,
                           trailing: Row(
@@ -57,6 +56,7 @@ class ExpiringSubscriptionsScreen extends ConsumerWidget {
                                     () => _sendMessage(
                                       customer.contact,
                                       context,
+                                      customer,
                                       daysUntilExpiry,
                                     ),
                               ),
@@ -79,6 +79,30 @@ class ExpiringSubscriptionsScreen extends ConsumerWidget {
     return Colors.yellow.shade700;
   }
 
+  String _formatExpiryTime(DateTime subscriptionEnd, int daysUntilExpiry) {
+    final now = DateTime.now();
+    final difference = subscriptionEnd.difference(now);
+
+    if (daysUntilExpiry > 0) {
+      // Positive days - standard display
+      return 'Expires: ${DateFormat('MMM d, y - hh:mm a').format(subscriptionEnd)}';
+    } else if (difference.inHours.abs() < 24) {
+      // Less than a day (hours)
+      final hours = difference.inHours.abs();
+      final prefix = difference.isNegative ? 'Expired' : 'Expires';
+      return '$prefix in $hours hour${hours != 1 ? 's' : ''}';
+    } else if (difference.inMinutes.abs() < 60) {
+      // Less than an hour (minutes)
+      final minutes = difference.inMinutes.abs();
+      final prefix = difference.isNegative ? 'Expired' : 'Expires';
+      return '$prefix in $minutes minute${minutes != 1 ? 's' : ''}';
+    } else {
+      // More than a day past expiration
+      final expiredDays = (-daysUntilExpiry).abs();
+      return 'Expired $expiredDays day${expiredDays != 1 ? 's' : ''} ago';
+    }
+  }
+
   Future<void> _makeCall(String contact) async {
     final url = Uri.parse('tel:$contact');
     if (await canLaunchUrl(url)) {
@@ -86,55 +110,61 @@ class ExpiringSubscriptionsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _sendMessage(
-    String contact,
-    BuildContext context,
-    int daysUntilExpiry,
-  ) async {
-    final messageOptions = await showDialog<String>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Send Message'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.message),
-                  title: const Text('SMS'),
-                  onTap: () => Navigator.pop(context, 'sms'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.whatshot),
-                  title: const Text('WhatsApp Business'),
-                  onTap: () => Navigator.pop(context, 'whatsapp'),
-                ),
-              ],
-            ),
+ Future<void> _sendMessage(
+  String contact,
+  BuildContext context,
+  Customer customer,
+  int daysUntilExpiry,
+) async {
+  final messageOptions = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Send Message'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.message),
+            title: const Text('SMS'),
+            onTap: () => Navigator.pop(context, 'sms'),
           ),
-    );
+          ListTile(
+            leading: const Icon(Icons.whatshot),
+            title: const Text('WhatsApp Business'),
+            onTap: () => Navigator.pop(context, 'whatsapp'),
+          ),
+        ],
+      ),
+    ),
+  );
 
-    if (messageOptions == null) return;
-    String daysleftString =
-        daysUntilExpiry <= 0 ? 'TODAY ' : 'in $daysUntilExpiry days';
-    final message = Uri.encodeComponent(
-      'Dear valued customer, this is a reminder that your WiFi subscription '
-      'is due for renewal. Please renew to avoid service interruption. '
-      'Your subscription will expire $daysleftString'
-      'Thank you for your continued support.',
-    );
+  if (messageOptions == null) return;
+  
+  final expiryStatus = _formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry);
+  final planType = customer.planType.name;
+  
+  final message = Uri.encodeComponent(
+    'Dear ${customer.name},\n\n'
+    'This is a reminder regarding your WiFi subscription status:\n\n'
+    '• Plan Type: $planType\n'
+    '• Status: $expiryStatus\n\n'
+    'Please renew your subscription to ensure uninterrupted service. '
+    'You can process the renewal through our app or contact our support team.\n\n'
+    'Thank you for choosing our services.\n\n'
+    'Best regards,\n'
+    'Your WiFi Service Provider'
+  );
 
-    final url =
-        messageOptions == 'whatsapp'
-            ? Uri.parse(
-              'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
-            )
-            : Uri.parse('sms:$contact?body=$message');
+  final url = messageOptions == 'whatsapp'
+      ? Uri.parse(
+          'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
+        )
+      : Uri.parse('sms:$contact?body=$message');
 
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    }
+  if (await canLaunchUrl(url)) {
+    await launchUrl(url);
   }
+}
 
   Future<void> _showRenewalDialog(
     BuildContext context,

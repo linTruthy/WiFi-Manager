@@ -56,7 +56,7 @@ class CustomerListTile extends ConsumerWidget {
           ),
       title: Text(customer.name),
       subtitle: Text(
-        'Expires: ${DateFormat('MMM dd, yyyy').format(customer.subscriptionEnd)}',
+        'Expires: ${DateFormat('MMM dd, yyyy - hh:mm a').format(customer.subscriptionEnd)}',
       ),
       trailing: IconButton(
         icon: const Icon(Icons.edit),

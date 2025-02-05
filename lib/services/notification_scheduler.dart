@@ -21,7 +21,6 @@ class NotificationScheduler {
     try {
       await _repository.scheduleNotifications();
     } catch (e) {
-      print('Error scheduling notifications: $e');
       // Implement proper error logging here
     }
   }
