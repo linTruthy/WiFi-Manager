@@ -15,3 +15,4 @@ class AppPreferences {
     await prefs.setBool(_firstTimeKey, false);
   }
 }
+

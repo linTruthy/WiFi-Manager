@@ -1,82 +1,130 @@
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/intl.dart';
-
 
 import '../database/models/payment.dart';
 import '../providers/customer_provider.dart';
 import '../providers/payment_provider.dart';
+import '../services/ad_manager.dart';
 import '../widgets/add_payment_dialog.dart';
 import '../widgets/receipt_button.dart';
 
-class PaymentsScreen extends ConsumerWidget {
+class PaymentsScreen extends ConsumerStatefulWidget {
   const PaymentsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PaymentsScreen> createState() => _PaymentsScreenState();
+}
+
+class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
+  final AdManager _adManager = AdManager();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAds();
+  }
+
+  Future<void> _initializeAds() async {
+    // Initialize banner ad with a medium rectangle format for better revenue
+    await _adManager.initializeBannerAd(
+      size: AdSize.mediumRectangle,
+      // Replace with your actual ad unit ID in production
+     // adUnitId: 'your_banner_ad_unit_id_here',
+    );
+
+    // Initialize interstitial ad
+    await _adManager.initializeInterstitialAd(
+      // Replace with your actual ad unit ID in production
+     // adUnitId: 'your_interstitial_ad_unit_id_here',
+    );
+  }
+
+  @override
+  void dispose() {
+    _showExitInterstitial();
+    _adManager.dispose();
+    super.dispose();
+  }
+
+  Future<void> _showExitInterstitial() async {
+    await _adManager.showInterstitialAd();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final paymentsAsync = ref.watch(filteredPaymentsProvider);
     final summaryAsync = ref.watch(paymentSummaryProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Payment History'),
-        actions: [
-          IconButton(
-            icon: const Icon(CupertinoIcons.calendar),
-            onPressed: () => _showDateRangePicker(context, ref),
-          ),
-          IconButton(
-            icon: const Icon(CupertinoIcons.add),
-            onPressed: () => _showAddPaymentDialog(context, ref),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Consumer(
-            builder: (context, ref, child) {
-              final dateRange = ref.watch(selectedDateRangeProvider);
-              if (dateRange == null) return const SizedBox.shrink();
-
-              return Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Chip(
-                  label: Text(
-                    '${DateFormat('MMM d').format(dateRange.start)} - '
-                    '${DateFormat('MMM d').format(dateRange.end)}',
-                  ),
-                  onDeleted:
-                      () =>
-                          ref.read(selectedDateRangeProvider.notifier).state =
-                              null,
-                ),
-              );
-            },
-          ),
-          _PaymentSummaryCard(summaryAsync: summaryAsync),
-          Expanded(
-            child: paymentsAsync.when(
-              data:
-                  (payments) =>
-                      payments.isEmpty
-                          ? const Center(child: Text('No payments found'))
-                          : ListView.builder(
-                            itemCount: payments.length,
-                            itemBuilder:
-                                (context, index) =>
-                                    _PaymentListTile(payment: payments[index]),
-                          ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(child: Text('Error: $error')),
+    return WillPopScope(
+      onWillPop: () async {
+        await _showExitInterstitial();
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Payment History'),
+          actions: [
+            IconButton(
+              icon: const Icon(CupertinoIcons.calendar),
+              onPressed: () => _showDateRangePicker(context),
             ),
-          ),
-        ],
+            IconButton(
+              icon: const Icon(CupertinoIcons.add),
+              onPressed: () => _showAddPaymentDialog(context),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Consumer(
+              builder: (context, ref, child) {
+                final dateRange = ref.watch(selectedDateRangeProvider);
+                if (dateRange == null) return const SizedBox.shrink();
+
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Chip(
+                    label: Text(
+                      '${DateFormat('MMM d').format(dateRange.start)} - '
+                      '${DateFormat('MMM d').format(dateRange.end)}',
+                    ),
+                    onDeleted: () =>
+                        ref.read(selectedDateRangeProvider.notifier).state = null,
+                  ),
+                );
+              },
+            ),
+            _PaymentSummaryCard(summaryAsync: summaryAsync),
+            Expanded(
+              child: paymentsAsync.when(
+                data: (payments) => payments.isEmpty
+                    ? const Center(child: Text('No payments found'))
+                    : ListView.builder(
+                        itemCount: payments.length,
+                        itemBuilder: (context, index) =>
+                            _PaymentListTile(payment: payments[index]),
+                      ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => Center(child: Text('Error: $error')),
+              ),
+            ),
+            // Banner ad at the bottom
+            Center(
+              child: _adManager.getBannerAdWidget(
+                maxWidth: MediaQuery.of(context).size.width,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Future<void> _showDateRangePicker(BuildContext context, WidgetRef ref) async {
+  Future<void> _showDateRangePicker(BuildContext context) async {
     final dateRange = await showDateRangePicker(
       context: context,
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
@@ -84,16 +132,21 @@ class PaymentsScreen extends ConsumerWidget {
       currentDate: DateTime.now(),
     );
 
-    if (dateRange != null) {
+    if (dateRange != null && mounted) {
       ref.read(selectedDateRangeProvider.notifier).state = dateRange;
     }
   }
 
-  Future<void> _showAddPaymentDialog(BuildContext context, WidgetRef ref) {
-    return showDialog(
+  Future<void> _showAddPaymentDialog(BuildContext context) async {
+    final result = await showDialog(
       context: context,
       builder: (context) => const AddPaymentDialog(),
     );
+
+    // Show interstitial ad after adding a payment
+    if (result == true) {
+      await _adManager.showInterstitialAd();
+    }
   }
 }
 

@@ -5,9 +5,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
-import 'package:wifi_manager/database/models/plan.dart';
+
 import '../database/models/customer.dart';
 import '../database/models/payment.dart';
+import '../database/models/plan.dart';
 
 class ReceiptService {
   static final _currency = NumberFormat.currency(

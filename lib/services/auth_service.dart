@@ -2,7 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wifi_manager/services/app_preferences.dart';
+
+import 'app_preferences.dart';
+
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;

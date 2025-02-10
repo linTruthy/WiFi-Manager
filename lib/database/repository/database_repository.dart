@@ -441,6 +441,31 @@ class DatabaseRepository {
     }
   }
 
+  Future<void> activateCustomer(Id customerId) async {
+    final isar = await db;
+    await isar.writeTxn(() async {
+      final customer = await isar.customers.get(customerId);
+      if (customer != null) {
+        customer.isActive = true;
+        await isar.customers.put(customer);
+        await isar.syncStatus.put(
+          SyncStatus(
+            entityId: customer.id,
+            entityType: 'customer',
+            operation: 'save',
+            timestamp: DateTime.now(),
+          ),
+        );
+      }
+    });
+    if (await isOnline()) {
+      await _firestore
+          .collection(_getUserCollectionPath('customers'))
+          .doc(customerId.toString())
+          .update({'isActive': true});
+    }
+  }
+
   pushCustomer(Customer customer) async {
     if (await isOnline()) {
       await _firestore

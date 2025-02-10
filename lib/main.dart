@@ -1,5 +1,5 @@
 import 'dart:io';
-
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -108,7 +108,7 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await _configureLocalTimeZone();
   await Future.wait([SubscriptionNotificationService.initialize()]);
-
+  await MobileAds.instance.initialize();
   await SubscriptionNotificationService.clearExpiredNotifications();
   final authService = AuthService();
   final initialRoute = await authService.getInitialRoute();

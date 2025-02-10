@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:wifi_manager/database/models/customer.dart';
-import 'package:wifi_manager/providers/database_provider.dart';
-import 'package:wifi_manager/screens/add_customer_screen.dart';
-import 'package:wifi_manager/screens/customer_detail_screen.dart';
-import 'package:wifi_manager/screens/customers_screen.dart';
-import 'package:wifi_manager/screens/edit_customer_screen.dart';
-import 'package:wifi_manager/screens/expiring_subscriptions_screen.dart';
-import 'package:wifi_manager/screens/home_screen.dart';
-import 'package:wifi_manager/screens/payments_screen.dart';
 
+import 'database/models/customer.dart';
+import 'providers/database_provider.dart';
+import 'screens/add_customer_screen.dart';
+import 'screens/customer_detail_screen.dart';
+import 'screens/customers_screen.dart';
+import 'screens/downtime_input_screen.dart';
+import 'screens/edit_customer_screen.dart';
+import 'screens/expiring_subscriptions_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/inactive_customers_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/payments_screen.dart';
 
 class AppRouter {
   static Route<dynamic>? onGenerateRoute(
@@ -22,7 +23,9 @@ class AppRouter {
     return switch (settings.name) {
       '/login' => MaterialPageRoute(builder: (_) => const LoginScreen()),
       '/register' => MaterialPageRoute(builder: (_) => const RegisterScreen()),
-
+      '/downtime-input' => MaterialPageRoute(
+        builder: (_) => const DowntimeInputScreen(),
+      ),
       final name when name?.startsWith('/customer/') ?? false =>
         MaterialPageRoute(
           builder:
@@ -100,5 +103,6 @@ class AppRouter {
     '/payments': (context) => const PaymentsScreen(),
     '/expiring-subscriptions': (context) => const ExpiringSubscriptionsScreen(),
     '/home': (context) => const HomeScreen(),
+    '/downtime-input': (context) => const DowntimeInputScreen(),
   };
 }

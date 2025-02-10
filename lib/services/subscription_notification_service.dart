@@ -7,7 +7,7 @@ import 'package:isar/isar.dart';
 import 'package:logger/logger.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:wifi_manager/app_router.dart';
+import 'package:truthy_wifi_manager/app_router.dart';
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';

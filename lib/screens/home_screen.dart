@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:wifi_manager/database/repository/database_repository.dart';
+import 'package:truthy_wifi_manager/database/repository/database_repository.dart';
 
 import '../providers/active_customer_trend_provider.dart';
 import '../providers/database_provider.dart';
@@ -11,6 +12,7 @@ import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/syncing_provider.dart';
+import '../services/ad_manager.dart';
 import '../services/subscription_widget_service.dart';
 import '../widgets/expiring_subscriptions_banner.dart';
 import 'login_screen.dart';
@@ -28,7 +30,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-
+  final AdManager _adManager = AdManager();
   @override
   void initState() {
     super.initState();
@@ -48,10 +50,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     _controller.forward();
+    // Initialize ads
+    _initializeAds();
+
+    // Schedule periodic interstitial ad preloading
+    Timer.periodic(const Duration(minutes: 2), (timer) {
+      _adManager.initializeInterstitialAd();
+    });
+  }
+
+  Future<void> _initializeAds() async {
+    await _adManager.initializeBannerAd();
+    await _adManager.initializeInterstitialAd();
+    await _adManager.initializeRewardedAd();
   }
 
   @override
   void dispose() {
+    _adManager.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -73,8 +89,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ref.invalidate(expiringSubscriptionsProvider);
     ref.watch(notificationSchedulerProvider);
     ref.watch(scheduledNotificationsProvider);
-    
-
 
     ref.read(databaseProvider).syncPendingChanges();
     ref.read(databaseProvider).scheduleNotifications();
@@ -165,20 +179,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget _buildMainContent() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const ExpiringSubscriptionsBanner(),
-            const SizedBox(height: 24),
-            _AnimatedStatsSection(ref: ref),
-            const SizedBox(height: 24),
-            _buildSectionHeader('Quick Actions'),
-            const SizedBox(height: 16),
-            _AnimatedActionsGrid(),
-          ],
-        ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ExpiringSubscriptionsBanner(),
+                const SizedBox(height: 24),
+                _AnimatedStatsSection(ref: ref),
+                const SizedBox(height: 24),
+                _buildSectionHeader('Quick Actions'),
+                const SizedBox(height: 16),
+                _AnimatedActionsGrid(),
+                const SizedBox(height: 24),
+                // Add banner ad with glassmorphic style
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                        ),
+                      ),
+                      child: _adManager.getBannerAdWidget(
+                        maxWidth: MediaQuery.of(context).size.width - 32,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -575,6 +613,23 @@ class _AnimatedStatContent extends StatelessWidget {
 }
 
 class _AnimatedActionsGrid extends StatelessWidget {
+  final AdManager _adManager = AdManager();
+
+  Future<void> _handleActionTap(BuildContext context, String route) async {
+    // Show interstitial ad with 30% probability when navigating
+    if (Random().nextDouble() < 0.3) {
+      final bool adShown = await _adManager.showInterstitialAd();
+      if (!adShown) {
+        // If ad fails to show, navigate immediately
+        Navigator.pushNamed(context, route);
+        return;
+      }
+      // Add a small delay after ad is shown before navigation
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    Navigator.pushNamed(context, route);
+  }
+
   @override
   Widget build(BuildContext context) {
     return GridView.count(
@@ -590,28 +645,35 @@ class _AnimatedActionsGrid extends StatelessWidget {
           title: 'Add Customer',
           icon: CupertinoIcons.person_add_solid,
           gradient: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
-          onTap: () => Navigator.pushNamed(context, '/add-customer'),
+          onTap: () => _handleActionTap(context, '/add-customer'),
         ),
         _buildAnimatedActionCard(
           index: 1,
           title: 'Recent Payments',
           icon: CupertinoIcons.money_dollar_circle_fill,
           gradient: const [Color(0xFF1E88E5), Color(0xFF1565C0)],
-          onTap: () => Navigator.pushNamed(context, '/payments'),
+          onTap: () => _handleActionTap(context, '/payments'),
         ),
         _buildAnimatedActionCard(
           index: 2,
           title: 'View Customers',
           icon: CupertinoIcons.person_2_fill,
           gradient: const [Color(0xFF7E57C2), Color(0xFF4527A0)],
-          onTap: () => Navigator.pushNamed(context, '/customers'),
+          onTap: () => _handleActionTap(context, '/customers'),
         ),
         _buildAnimatedActionCard(
           index: 3,
           title: 'Expiring',
           icon: CupertinoIcons.exclamationmark_triangle_fill,
           gradient: const [Color(0xFFFF7043), Color(0xFFE64A19)],
-          onTap: () => Navigator.pushNamed(context, '/expiring-subscriptions'),
+          onTap: () => _handleActionTap(context, '/expiring-subscriptions'),
+        ),
+        _buildAnimatedActionCard(
+          index: 3,
+          title: 'Down time',
+          icon: CupertinoIcons.clock_solid,
+          gradient: const [Color(0xFFFF7043), Color(0xFFE64A19)],
+          onTap: () => _handleActionTap(context, '/downtime-input'),
         ),
       ],
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:wifi_manager/database/models/customer.dart';
+
+import '../database/models/customer.dart';
 
 class SubscriptionWidgetService {
   static const platform = MethodChannel(
