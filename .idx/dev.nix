@@ -1,26 +1,42 @@
-# To learn more about how to use Nix to configure your environment
-# see: https://developers.google.com/idx/guides/customize-idx-env
 { pkgs, ... }: {
-  # Which nixpkgs channel to use.
-  channel = "stable-24.05"; # or "unstable"
-  # Use https://search.nixos.org/packages to find packages
   packages = [
     pkgs.jdk17
-    pkgs.unzip
   ];
-  # Sets environment variables in the workspace
-  env = {};
+  
+  env = {
+    JAVA_HOME = "${pkgs.jdk17}/lib/openjdk";
+  };
+
   idx = {
-    # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
       "Dart-Code.flutter"
       "Dart-Code.dart-code"
     ];
     workspace = {
-      # Runs when a workspace is first created with this `dev.nix` file
       onCreate = {
+        setup-android = ''
+          # Create Android SDK directory
+          mkdir -p /home/user/android-sdk/cmdline-tools
+
+          # Download command line tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          
+          # Unzip to the correct location
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools /home/user/android-sdk/cmdline-tools/latest
+          rm cmdline-tools.zip
+
+          # Add to PATH
+          export PATH="/home/user/android-sdk/cmdline-tools/latest/bin:$PATH"
+          
+          # Set ANDROID_HOME
+          export ANDROID_HOME="/home/user/android-sdk"
+        '';
         build-flutter = ''
           cd /home/user/myapp/android
+
+          # Accept licenses after tools are installed
+          yes | sdkmanager --licenses || true
 
           ./gradlew \
             --parallel \
@@ -34,21 +50,12 @@
             -Ptree-shake-icons=false \
             -Pfilesystem-scheme=org-dartlang-root \
             assembleDebug
-
-          # TODO: Execute web build in debug mode.
-          # flutter run does this transparently either way
-          # https://github.com/flutter/flutter/issues/96283#issuecomment-1144750411
-          # flutter build web --profile --dart-define=Dart2jsOptimization=O0
         '';
       };
-      
-      # To run something each time the workspace is (re)started, use the `onStart` hook
     };
-    # Enable previews and customize configuration
     previews = {
       enable = true;
       previews = {
-       
         android = {
           command = ["flutter" "run" "--machine" "-d" "android" "-d" "localhost:5555"];
           manager = "flutter";
