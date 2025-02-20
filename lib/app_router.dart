@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:truthy_wifi_manager/screens/customer_share_view.dart';
 
 import 'database/models/customer.dart';
 import 'providers/database_provider.dart';
@@ -23,6 +24,7 @@ class AppRouter {
     return switch (settings.name) {
       '/login' => MaterialPageRoute(builder: (_) => const LoginScreen()),
       '/register' => MaterialPageRoute(builder: (_) => const RegisterScreen()),
+      
       '/downtime-input' => MaterialPageRoute(
         builder: (_) => const DowntimeInputScreen(),
       ),
@@ -104,5 +106,7 @@ class AppRouter {
     '/expiring-subscriptions': (context) => const ExpiringSubscriptionsScreen(),
     '/home': (context) => const HomeScreen(),
     '/downtime-input': (context) => const DowntimeInputScreen(),
+    '/customer-share': (context) => const CustomerShareView(),
+    
   };
 }

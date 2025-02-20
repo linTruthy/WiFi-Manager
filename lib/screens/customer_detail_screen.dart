@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../database/models/customer.dart';
 import '../services/ad_manager.dart';
+import '../utils.dart';
 import '../widgets/add_payment_dialog.dart';
 import 'edit_customer_screen.dart';
 import 'referral_stats_screen.dart';
@@ -60,6 +61,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     await _adManager.showInterstitialAd();
   }
 
+  void _shareCustomerLink() {
+  
+    final link = generateShareableLink(widget.customer.id.toString(), widget.customer.subscriptionEnd);
+    Share.share('View my WiFi subscription details: $link');
+  }
+
   @override
   Widget build(BuildContext context) {
     final daysUntilExpiry =
@@ -78,10 +85,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder:
-                      (context) => ReferralStatsScreen(
-                        referrerId: widget.customer.id.toString(),
-                      ),
+                  builder: (context) => ReferralStatsScreen(
+                    referrerId: widget.customer.id.toString(),
+                  ),
                 ),
               );
             },
@@ -94,9 +100,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          EditCustomerScreen(customer: widget.customer),
+                  builder: (context) =>
+                      EditCustomerScreen(customer: widget.customer),
                 ),
               );
             },
@@ -223,6 +228,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             await _showInterstitialOnAction();
                           },
                           child: const Text('Share Referral Code'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => _shareCustomerLink(),
+                          child: const Text('Share view link'),
                         ),
                       ],
                     ),

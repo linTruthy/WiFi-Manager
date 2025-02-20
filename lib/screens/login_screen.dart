@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
 import '../services/app_preferences.dart';
 import '../services/auth_service.dart';
 
@@ -29,6 +28,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _passwordController = TextEditingController();
   bool _isBiometricEnabled = false;
   bool _rememberMe = false;
+  bool _isLoading = false;
+  bool _isPasswordVisible = false;
+  String? _errorMessage;
   @override
   void initState() {
     super.initState();
@@ -45,8 +47,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
-    _checkBiometricSupport();
-    _checkPersistentLogin();
+    // _checkBiometricSupport();
+    // _checkPersistentLogin();
+    _checkSessionAndBiometrics();
+  }
+
+  Future<void> _checkSessionAndBiometrics() async {
+    final authService = ref.read(authServiceProvider);
+
+    // Check if there's a valid session
+    if (await authService.isSessionValid()) {
+      // Try biometric authentication if available
+      final isAuthenticated = await authService.authenticateWithBiometrics();
+      if (isAuthenticated) {
+        _navigateToHome();
+      }
+    }
   }
 
   @override
@@ -57,28 +73,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     super.dispose();
   }
 
-  Future<void> _checkBiometricSupport() async {
-    final localAuth = LocalAuthentication();
-    bool canCheckBiometrics = await localAuth.canCheckBiometrics;
-    bool isDeviceSupported = await localAuth.isDeviceSupported();
-
-    setState(() {
-      _isBiometricEnabled = canCheckBiometrics && isDeviceSupported;
-    });
-  }
-
-  Future<void> _checkPersistentLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-
-    if (isLoggedIn && _isBiometricEnabled) {
-      final authService = ref.read(authServiceProvider);
-      final isAuthenticated = await authService.authenticateWithBiometrics();
-
-      if (isAuthenticated) {
-        Navigator.pushReplacementNamed(context, '/home');
-      }
-    }
+  void _showErrorSnackbar(String message) {
+    setState(() => _errorMessage = message);
   }
 
   @override
@@ -122,6 +118,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 24),
+                                if (_errorMessage != null)
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    margin: const EdgeInsets.only(bottom: 16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.red.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: const TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
                                 TextFormField(
                                   controller: _emailController,
                                   decoration: const InputDecoration(
@@ -133,61 +148,78 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   controller: _passwordController,
-                                  obscureText: true,
-                                  decoration: const InputDecoration(
+                                  obscureText: !_isPasswordVisible,
+                                  decoration: InputDecoration(
                                     labelText: 'Password',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.lock),
+                                    border: const OutlineInputBorder(),
+                                    prefixIcon: const Icon(Icons.lock),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _isPasswordVisible
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isPasswordVisible =
+                                              !_isPasswordVisible;
+                                        });
+                                      },
+                                    ),
                                   ),
                                 ),
                                 Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Checkbox(
-                                      value: _rememberMe,
-                                      onChanged:
-                                          (value) => setState(
+                                    Row(
+                                      children: [
+                                        Checkbox(
+                                          value: _rememberMe,
+                                          onChanged: (value) => setState(
                                             () => _rememberMe = value ?? false,
                                           ),
+                                        ),
+                                        const Text('Remember me'),
+                                      ],
                                     ),
-                                    const Text('Remember me'),
+                                    TextButton(
+                                      onPressed: () =>
+                                          _showResetPasswordDialog(),
+                                      child: const Text(
+                                        'Forgot Password?',
+                                        style:
+                                            TextStyle(color: Colors.blueAccent),
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 24),
-                                ElevatedButton(
-                                  onPressed: _login,
-                                  // onPressed: () async {
-                                  //   final authService = ref.read(
-                                  //     authServiceProvider,
-                                  //   );
-                                  //   final user = await authService.signIn(
-                                  //     _emailController.text,
-                                  //     _passwordController.text,
-                                  //   );
-                                  //   if (user != null) {
-                                  //     Navigator.pushReplacementNamed(
-                                  //       context,
-                                  //       '/home',
-                                  //     );
-                                  //   } else {
-                                  //     ScaffoldMessenger.of(
-                                  //       context,
-                                  //     ).showSnackBar(
-                                  //       const SnackBar(
-                                  //         content: Text(
-                                  //           'Login failed. Please check your credentials.',
-                                  //         ),
-                                  //       ),
-                                  //     );
-                                  //   }
-                                  // },
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 32,
-                                      vertical: 16,
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: _isLoading ? null : _login,
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 32,
+                                        vertical: 16,
+                                      ),
+                                      backgroundColor: Colors.black54,
                                     ),
-                                    backgroundColor: Colors.black54,
+                                    child: _isLoading
+                                        ? const SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                            ),
+                                          )
+                                        : const Text('Sign In'),
                                   ),
-                                  child: const Text('Sign In'),
                                 ),
                                 const SizedBox(height: 16),
                                 if (_isBiometricEnabled)
@@ -201,7 +233,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     Navigator.pushNamed(context, '/register');
                                   },
                                   child: const Text(
-                                    'Don’t have an account? Create one',
+                                    'Don \'t have an account? Create one',
                                     style: TextStyle(color: Colors.blueAccent),
                                   ),
                                 ),
@@ -222,25 +254,116 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Future<void> _login() async {
-    final authService = ref.read(authServiceProvider);
+    if (!_validateInputs()) return;
 
-    final user = await authService.signInWithPersistence(
-      _emailController.text,
-      _passwordController.text,
-      _rememberMe,
-    );
+    setState(() => _isLoading = true);
 
-    if (user != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Login failed. Please check your credentials.'),
-        ),
+    try {
+      final authService = ref.read(authServiceProvider);
+      final result = await authService.signInWithPersistence(
+        _emailController.text,
+        _passwordController.text,
+        _rememberMe,
       );
+
+      if (result.user != null) {
+        if (result.requiresVerification) {
+          _showVerificationDialog();
+        } else {
+          _navigateToHome();
+        }
+      } else {
+        _showErrorSnackbar(result.error ?? 'Login failed');
+      }
+    } finally {
+      setState(() => _isLoading = false);
     }
+  }
+
+  bool _validateInputs() {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      _showErrorSnackbar('Please fill in all fields');
+      return false;
+    }
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+        .hasMatch(_emailController.text)) {
+      _showErrorSnackbar('Please enter a valid email');
+      return false;
+    }
+    return true;
+  }
+
+  void _showVerificationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Verify Your Email'),
+        content: const Text(
+            'Please check your email and verify your account before continuing.'),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final authService = ref.read(authServiceProvider);
+              await authService.verifyEmail();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Verification email sent')),
+              );
+            },
+            child: const Text('Resend Email'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showResetPasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: _emailController,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            hintText: 'Enter your email address',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              try {
+                final authService = ref.read(authServiceProvider);
+                await authService.resetPassword(_emailController.text);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Password reset email sent'),
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.toString())),
+                );
+              }
+            },
+            child: const Text('Send Reset Link'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToHome() {
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   Future<void> _authenticateWithBiometrics() async {

@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-//import 'package:workmanager/workmanager.dart';
+import 'package:truthy_wifi_manager/screens/customer_share_view.dart';
+
 import 'database/repository/database_repository.dart';
 import 'firebase_options.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -29,6 +30,7 @@ class MyApp extends ConsumerWidget {
       onGenerateRoute: (settings) => AppRouter.onGenerateRoute(settings, ref),
       routes: AppRouter.routes,
       title: 'Truthy WiFi Manager',
+      home: kIsWeb ? CustomerShareView() : null,
       initialRoute: initialRoute,
       theme: ThemeData(
         useMaterial3: true,
@@ -105,21 +107,27 @@ class MyApp extends ConsumerWidget {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await _configureLocalTimeZone();
-  await Future.wait([SubscriptionNotificationService.initialize()]);
-  await MobileAds.instance.initialize();
-  await SubscriptionNotificationService.clearExpiredNotifications();
-  final authService = AuthService();
-  final initialRoute = await authService.getInitialRoute();
 
-  if (initialRoute == '/home') {
-    final dbRepo = DatabaseRepository();
-    await dbRepo.scheduleNotifications();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  String initialRoute;
+  if (kIsWeb) {
+    initialRoute = '/customer-share';
+  } else {
+    await _configureLocalTimeZone();
+    await Future.wait([SubscriptionNotificationService.initialize()]);
+    await MobileAds.instance.initialize();
+    await SubscriptionNotificationService.clearExpiredNotifications();
+    final authService = AuthService();
+    initialRoute = await authService.getInitialRoute();
+    if (initialRoute == '/home') {
+      final dbRepo = DatabaseRepository();
+      await dbRepo.scheduleNotifications();
+    }
   }
+
   runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));
 }
-
 
 Future<void> _configureLocalTimeZone() async {
   if (kIsWeb || Platform.isLinux) {
