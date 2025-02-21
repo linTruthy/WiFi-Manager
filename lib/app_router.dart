@@ -14,6 +14,7 @@ import 'screens/home_screen.dart';
 import 'screens/inactive_customers_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/payments_screen.dart';
+import 'screens/settings_screen.dart';
 
 class AppRouter {
   static Route<dynamic>? onGenerateRoute(
@@ -107,6 +108,6 @@ class AppRouter {
     '/home': (context) => const HomeScreen(),
     '/downtime-input': (context) => const DowntimeInputScreen(),
     '/customer-share': (context) => const CustomerShareView(),
-    
+    '/settings': (context) => const SettingsScreen(),
   };
 }

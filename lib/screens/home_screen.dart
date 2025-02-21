@@ -4,8 +4,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:truthy_wifi_manager/database/repository/database_repository.dart';
 
+import '../database/models/customer.dart';
 import '../providers/active_customer_trend_provider.dart';
 import '../providers/database_provider.dart';
 import '../providers/notification_schedule_provider.dart';
@@ -31,6 +33,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   final AdManager _adManager = AdManager();
+  String _filter = 'This Month'; // Default filter
   @override
   void initState() {
     super.initState();
@@ -75,145 +78,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final authService = ref.read(authServiceProvider);
-    final user = authService.currentUser;
-
-    if (user == null) {
-      return const LoginScreen();
-    }
-    ref.invalidate(recentPaymentsProvider);
-    ref.invalidate(paymentSummaryProvider);
-    ref.invalidate(filteredPaymentsProvider);
-    ref.invalidate(activeCustomersProvider);
-    ref.invalidate(expiringCustomersProvider);
-    ref.invalidate(syncingProvider);
+    if (authService.currentUser == null) return const LoginScreen();
     ref.invalidate(expiringSubscriptionsProvider);
-    ref.watch(notificationSchedulerProvider);
-    ref.watch(scheduledNotificationsProvider);
-
-    ref.read(databaseProvider).syncPendingChanges();
-    ref.read(databaseProvider).scheduleNotifications();
-
+    ref.invalidate(activeCustomersProvider);
+    ref.invalidate(paymentSummaryProvider);
+    ref.watch(databaseProvider).syncPendingChanges();
+    ref.watch(databaseProvider).scheduleNotifications();
     final isSyncing = ref.watch(syncingProvider);
-
-    final activeCustomers = ref.watch(activeCustomersProvider);
-
+    final activeCustomers =
+        ref.watch(activeCustomersProvider); // Watch the FutureProvider
+    final expiringSubscriptions = ref.watch(expiringSubscriptionsProvider);
     ref.listen(expiringSubscriptionsProvider, (previous, next) {
       next.whenData((customers) {
         activeCustomers.whenData((activeCount) {
-          SubscriptionWidgetService.updateWidgetData(
-            customers,
-            activeCount.length,
-          );
+          ref.watch(paymentSummaryProvider).whenData((summary) {
+            print(
+                'Sending to widget: expiring=${customers.length}, active=${activeCount.length}, revenue=${summary['total'] ?? 0.0}');
+            SubscriptionWidgetService.updateWidgetData(
+              customers,
+              activeCount.length,
+              summary['total'] ?? 0.0,
+            );
+          });
         });
       });
     });
-
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       extendBodyBehindAppBar: true,
       appBar: _GlassmorphicAppBar(
-        title: 'Truthy WiFi Manager',
-        onNotificationTap: () {
-          // Handle notifications
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ScheduledRemindersScreen(),
-            ),
-          );
-        },
+        title: 'WiFi Manager',
+        onNotificationTap: () =>
+            Navigator.pushNamed(context, '/scheduled-reminders'),
       ),
       body: Stack(
         children: [
           _AnimatedBackground(),
           SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: _buildMainContent(),
-              ),
-            ),
-          ),
-          if (isSyncing)
-            Positioned(
-              bottom: 20,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Syncing...',
-                        style: TextStyle(color: Colors.white, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMainContent() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ExpiringSubscriptionsBanner(),
-                const SizedBox(height: 24),
-                _AnimatedStatsSection(ref: ref),
-                const SizedBox(height: 24),
-                _buildSectionHeader('Quick Actions'),
-                const SizedBox(height: 16),
-                _AnimatedActionsGrid(),
-                const SizedBox(height: 24),
-                // Add banner ad with glassmorphic style
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                      ),
-                      child: _adManager.getBannerAdWidget(
-                        maxWidth: MediaQuery.of(context).size.width - 32,
-                      ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFilterBar(),
+                        const SizedBox(height: 16),
+                        _buildStatsSection(activeCustomers,
+                            expiringSubscriptions), // Pass as parameters
+                        const SizedBox(height: 16),
+                        _adManager.getBannerAdWidget(
+                            maxWidth: MediaQuery.of(context).size.width - 24),
+                       const SizedBox(height: 16),
+                        _buildQuickActions(),
+                        const SizedBox(height: 16),
+                        _buildSyncStatus(isSyncing),
+                        const SizedBox(height: 16),
+                        _adManager.getBannerAdWidget(
+                            maxWidth: MediaQuery.of(context).size.width - 24),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -221,29 +150,251 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 800),
-      curve: Curves.easeOut,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, 20 * (1 - value)),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        );
-      },
+  Widget _buildFilterBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: ['Today', 'This Week', 'This Month']
+            .map((filter) => Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(filter),
+                    selected: _filter == filter,
+                    onSelected: (selected) {
+                      if (selected) setState(() => _filter = filter);
+                    },
+                    selectedColor: Colors.blueAccent.withOpacity(0.3),
+                    backgroundColor: Colors.white.withOpacity(0.1),
+                    labelStyle: TextStyle(
+                        color:
+                            _filter == filter ? Colors.white : Colors.white70),
+                  ),
+                ))
+            .toList(),
+      ),
     );
   }
+
+  Widget _buildStatsSection(AsyncValue<List<Customer>> activeCustomers,
+      AsyncValue<List<Customer>> expiringSubscriptions) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+                child: _buildStatCard(
+                    'Active', activeCustomers, Colors.green, '/customers')),
+            const SizedBox(width: 12),
+            Expanded(
+                child: _buildStatCard('Expiring Today', expiringSubscriptions,
+                    Colors.red, '/expiring-subscriptions')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+                child: _buildStatCard(
+                    'Revenue',
+                    ref.watch(paymentSummaryProvider),
+                    Colors.blue,
+                    '/payments')),
+            const SizedBox(width: 12),
+            Expanded(
+                child: _buildStatCard('New This Week', activeCustomers,
+                    Colors.purple, '/customers')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(
+      String title, AsyncValue data, Color color, String route) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
+        ),
+        child: data.when(
+          data: (value) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              const SizedBox(height: 8),
+              Text(
+                title == 'Revenue'
+                    ? 'UGX ${value['total']?.toStringAsFixed(0) ?? '0'}'
+                    : title == 'New This Week'
+                        ? '${value.where((Customer customer) => customer.subscriptionStart.isAfter(DateTime.now().subtract(const Duration(days: 7)))).length}'
+                        : title == 'Expiring Today'
+                            ? '${value.where((Customer customer) => customer.subscriptionEnd.difference(DateTime.now()).inDays <= 0).length}'
+                            : '${value.length}',
+                style: TextStyle(
+                    color: color, fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              if (title == 'Revenue')
+                Text('Monthly',
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+          loading: () => const CircularProgressIndicator(),
+          error: (_, __) => const Icon(Icons.error, color: Colors.red),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.5,
+      children: [
+        _buildActionButton('Add Customer', CupertinoIcons.person_add_solid,
+            Colors.green, '/add-customer'),
+        _buildActionButton('Payments', CupertinoIcons.money_dollar_circle_fill,
+            Colors.blue, '/payments'),
+        _buildActionButton('Customers', CupertinoIcons.person_2_fill,
+            Colors.purple, '/customers'),
+        _buildActionButton(
+            'Expiring',
+            CupertinoIcons.exclamationmark_triangle_fill,
+            Colors.orange,
+            '/expiring-subscriptions'),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+      String title, IconData icon, Color color, String route) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+              colors: [color.withOpacity(0.7), color.withOpacity(0.5)]),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: Colors.white),
+            const SizedBox(height: 8),
+            Text(title,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSyncStatus(bool isSyncing) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isSyncing)
+            const CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(
+            isSyncing
+                ? 'Syncing...'
+                : 'Last Synced: ${DateFormat('hh:mm a').format(DateTime.now())}',
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Widget _buildMainContent() {
+//   return SingleChildScrollView(
+//     physics: const BouncingScrollPhysics(),
+//     child: Column(
+//       children: [
+//         Padding(
+//           padding: const EdgeInsets.all(16.0),
+//           child: Column(
+//             crossAxisAlignment: CrossAxisAlignment.start,
+//             children: [
+//               const ExpiringSubscriptionsBanner(),
+//               const SizedBox(height: 24),
+//               _AnimatedStatsSection(ref: ref),
+//               const SizedBox(height: 24),
+//               _buildSectionHeader('Quick Actions'),
+//               const SizedBox(height: 16),
+//               _AnimatedActionsGrid(),
+//               const SizedBox(height: 24),
+//               // Add banner ad with glassmorphic style
+//               ClipRRect(
+//                 borderRadius: BorderRadius.circular(16),
+//                 child: BackdropFilter(
+//                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+//                   child: Container(
+//                     decoration: BoxDecoration(
+//                       color: Colors.white.withOpacity(0.1),
+//                       borderRadius: BorderRadius.circular(16),
+//                       border: Border.all(
+//                         color: Colors.white.withOpacity(0.2),
+//                       ),
+//                     ),
+//                     child: _adManager.getBannerAdWidget(
+//                       maxWidth: MediaQuery.of(context).size.width - 32,
+//                     ),
+//                   ),
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//       ],
+//     ),
+//   );
+// }
+
+Widget _buildSectionHeader(String title) {
+  return TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 800),
+    curve: Curves.easeOut,
+    builder: (context, value, child) {
+      return Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 20 * (1 - value)),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _AnimatedBackground extends StatefulWidget {
@@ -312,9 +463,7 @@ class _GradientPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GradientPainter oldDelegate) => true;
 }
-
-class _GlassmorphicAppBar extends ConsumerWidget
-    implements PreferredSizeWidget {
+class _GlassmorphicAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
   final VoidCallback onNotificationTap;
 
@@ -354,7 +503,6 @@ class _GlassmorphicAppBar extends ConsumerWidget
                   ),
                 ),
                 const Spacer(),
-
                 Stack(
                   children: [
                     IconButton(
@@ -410,12 +558,19 @@ class _GlassmorphicAppBar extends ConsumerWidget
                 ),
                 const SizedBox(width: 8),
                 IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => Navigator.pushNamed(context, '/settings'),
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                IconButton(
                   icon: const Icon(Icons.logout),
                   onPressed: () async {
                     final authService = ref.read(authServiceProvider);
                     await authService.signOut();
                     Navigator.pushReplacementNamed(context, '/login');
                   },
+                  color: Colors.white,
                 ),
                 const SizedBox(width: 8),
               ],
@@ -460,18 +615,14 @@ class _AnimatedStatsSection extends StatelessWidget {
                         );
 
                         return customersAsync.when(
-                          data:
-                              (customers) => trendAsync.when(
-                                data:
-                                    (trend) => _AnimatedStatContent(
-                                      value: customers.length.toString(),
-                                      trend:
-                                          '${trend.toStringAsFixed(1)}% this month',
-                                    ),
-                                loading:
-                                    () => const CircularProgressIndicator(),
-                                error: (_, __) => const Icon(Icons.error),
-                              ),
+                          data: (customers) => trendAsync.when(
+                            data: (trend) => _AnimatedStatContent(
+                              value: customers.length.toString(),
+                              trend: '${trend.toStringAsFixed(1)}% this month',
+                            ),
+                            loading: () => const CircularProgressIndicator(),
+                            error: (_, __) => const Icon(Icons.error),
+                          ),
                           loading: () => const CircularProgressIndicator(),
                           error: (_, __) => const Icon(Icons.error),
                         );
@@ -491,11 +642,10 @@ class _AnimatedStatsSection extends StatelessWidget {
                           expiringCustomersProvider,
                         );
                         return expiringAsync.when(
-                          data:
-                              (customers) => _AnimatedStatContent(
-                                value: customers.length.toString(),
-                                trend: 'Next 3 days',
-                              ),
+                          data: (customers) => _AnimatedStatContent(
+                            value: customers.length.toString(),
+                            trend: 'Next 3 days',
+                          ),
                           loading: () => const CircularProgressIndicator(),
                           error: (_, __) => const Icon(Icons.error),
                         );

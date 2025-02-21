@@ -1,0 +1,2 @@
+/home/user/WiFi-Manager/android/app/.cxx/Debug/s64276b5/arm64-v8a/CMakeFiles/edit_cache.dir
+/home/user/WiFi-Manager/android/app/.cxx/Debug/s64276b5/arm64-v8a/CMakeFiles/rebuild_cache.dir

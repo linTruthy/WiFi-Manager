@@ -26,12 +26,36 @@ class DatabaseRepository {
   }
 
   Future<void> _initializeSync() async {
-    _connectivity.onConnectivityChanged.listen((result) {
+    _connectivity.onConnectivityChanged.listen((result) async {
       if (result.contains(ConnectivityResult.mobile) ||
           result.contains(ConnectivityResult.wifi)) {
-        syncPendingChanges();
+        if (kDebugMode) {
+          print('Network available, triggering sync');
+        }
+        await syncPendingChanges();
       }
     });
+  }
+
+  Future<void> deletePayment(Id paymentId) async {
+    final isar = await db;
+    await isar.writeTxn(() async {
+      await isar.payments.delete(paymentId);
+      await isar.syncStatus.put(
+        SyncStatus(
+          entityId: paymentId,
+          entityType: 'payment',
+          operation: 'delete',
+          timestamp: DateTime.now(),
+        ),
+      );
+    });
+    if (await isOnline()) {
+      await _firestore
+          .collection(_getUserCollectionPath('payments'))
+          .doc(paymentId.toString())
+          .delete();
+    }
   }
 
   Future<Isar> openDB() async {
@@ -126,7 +150,10 @@ class DatabaseRepository {
     final isar = await db;
     return await isar.customers.filter().isActiveEqualTo(false).findAll();
   }
-
+// Future<List<Customer>> getInactiveCustomers() async {
+//   final isar = await db;
+//   return await isar.customers.filter((Customer customer) => !customer.isActive).findAll();
+// }
   // Delete a customer and optionally all their associated data
   Future<void> deleteCustomerWithData(
     Id customerId,
@@ -171,21 +198,19 @@ class DatabaseRepository {
 
       if (deleteAssociatedData) {
         // Delete associated payments from Firestore
-        final paymentsSnapshot =
-            await _firestore
-                .collection(_getUserCollectionPath('payments'))
-                .where('customerId', isEqualTo: customerId.toString())
-                .get();
+        final paymentsSnapshot = await _firestore
+            .collection(_getUserCollectionPath('payments'))
+            .where('customerId', isEqualTo: customerId.toString())
+            .get();
         for (final doc in paymentsSnapshot.docs) {
           await doc.reference.delete();
         }
 
         // Delete associated referral stats from Firestore
-        final referralStatsSnapshot =
-            await _firestore
-                .collection(_getUserCollectionPath('referral_stats'))
-                .where('referrerId', isEqualTo: customerId.toString())
-                .get();
+        final referralStatsSnapshot = await _firestore
+            .collection(_getUserCollectionPath('referral_stats'))
+            .where('referrerId', isEqualTo: customerId.toString())
+            .get();
         for (final doc in referralStatsSnapshot.docs) {
           await doc.reference.delete();
         }
@@ -222,14 +247,28 @@ class DatabaseRepository {
     for (final status in pendingSync) {
       try {
         if (status.entityType == 'customer') {
-          final customer = await isar.customers.get(status.entityId);
-          if (customer != null) {
-            await _syncCustomerToFirestore(customer);
+          if (status.operation == 'save') {
+            final customer = await isar.customers.get(status.entityId);
+            if (customer != null) {
+              await _syncCustomerToFirestore(customer);
+            }
+          } else if (status.operation == 'delete') {
+            await _firestore
+                .collection(_getUserCollectionPath('customers'))
+                .doc(status.entityId.toString())
+                .delete();
           }
         } else if (status.entityType == 'payment') {
-          final payment = await isar.payments.get(status.entityId);
-          if (payment != null) {
-            await _syncPaymentToFirestore(payment);
+          if (status.operation == 'save') {
+            final payment = await isar.payments.get(status.entityId);
+            if (payment != null) {
+              await _syncPaymentToFirestore(payment);
+            }
+          } else if (status.operation == 'delete') {
+            await _firestore
+                .collection(_getUserCollectionPath('payments'))
+                .doc(status.entityId.toString())
+                .delete();
           }
         }
         await isar.writeTxn(() async {
@@ -241,6 +280,7 @@ class DatabaseRepository {
         }
       }
     }
+    await _mergeCloudPayments(); // Ensure cloud-to-local sync after local-to-cloud
     setSyncing(false);
   }
 
@@ -253,18 +293,16 @@ class DatabaseRepository {
     final now = DateTime.now();
     final currentMonthStart = DateTime(now.year, now.month, 1);
     final previousMonthStart = DateTime(now.year, now.month - 1, 1);
-    final currentMonthCustomers =
-        await isar.customers
-            .filter()
-            .isActiveEqualTo(true)
-            .subscriptionStartLessThan(currentMonthStart)
-            .findAll();
-    final previousMonthCustomers =
-        await isar.customers
-            .filter()
-            .isActiveEqualTo(true)
-            .subscriptionStartLessThan(previousMonthStart)
-            .findAll();
+    final currentMonthCustomers = await isar.customers
+        .filter()
+        .isActiveEqualTo(true)
+        .subscriptionStartLessThan(currentMonthStart)
+        .findAll();
+    final previousMonthCustomers = await isar.customers
+        .filter()
+        .isActiveEqualTo(true)
+        .subscriptionStartLessThan(previousMonthStart)
+        .findAll();
     if (previousMonthCustomers.isEmpty) {
       return 0.0;
     }
@@ -299,11 +337,10 @@ class DatabaseRepository {
 
   Future<Duration> getTotalRewardDuration(String referrerId) async {
     final isar = await db;
-    final referrals =
-        await isar.referralStats
-            .filter()
-            .referrerIdEqualTo(referrerId)
-            .findAll();
+    final referrals = await isar.referralStats
+        .filter()
+        .referrerIdEqualTo(referrerId)
+        .findAll();
     Duration totalReward = Duration.zero;
     for (final referral in referrals) {
       final rewardDuration = Duration(
@@ -333,6 +370,29 @@ class DatabaseRepository {
         if (localCustomer == null ||
             cloudCustomer.lastModified.isAfter(localCustomer.lastModified)) {
           await isar.customers.put(cloudCustomer);
+        }
+      }
+    });
+  }
+
+  Future<void> _mergeCloudPayments() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (kDebugMode) {
+        print('User not authenticated. Skipping Firestore payment sync.');
+      }
+      return;
+    }
+    final isar = await db;
+    final snapshot =
+        await _firestore.collection(_getUserCollectionPath('payments')).get();
+    await isar.writeTxn(() async {
+      for (final doc in snapshot.docs) {
+        final cloudPayment = Payment.fromJson(doc.data());
+        final localPayment = await isar.payments.get(cloudPayment.id);
+        if (localPayment == null ||
+            cloudPayment.lastModified.isAfter(localPayment.lastModified)) {
+          await isar.payments.put(cloudPayment);
         }
       }
     });
@@ -397,11 +457,13 @@ class DatabaseRepository {
 
   Future<List<Payment>> getRecentPayments() async {
     final isar = await db;
+    if (await isOnline()) {
+      await _mergeCloudPayments(); // Sync cloud payments to local
+    }
     return await isar.payments
         .filter()
         .paymentDateGreaterThan(
-          DateTime.now().subtract(const Duration(days: 30)),
-        )
+            DateTime.now().subtract(const Duration(days: 60)))
         .findAll();
   }
 
@@ -415,10 +477,9 @@ class DatabaseRepository {
     if (await isOnline()) {
       final customerBatch = _firestore.batch();
       final paymentBatch = _firestore.batch();
-      final customerDocs =
-          await _firestore
-              .collection(_getUserCollectionPath('customers'))
-              .get();
+      final customerDocs = await _firestore
+          .collection(_getUserCollectionPath('customers'))
+          .get();
       final paymentDocs =
           await _firestore.collection(_getUserCollectionPath('payments')).get();
       for (final doc in customerDocs.docs) {

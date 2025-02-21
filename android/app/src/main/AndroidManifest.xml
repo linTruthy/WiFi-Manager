@@ -42,7 +42,13 @@
             <meta-data
                 android:name="io.flutter.embedding.android.EnableVulkan"
                 android:value="true" />
-            
+            <service
+    android:name="com.truthysystems.wifi.NotificationSchedulerPlugin"
+    android:exported="false">
+    <intent-filter>
+        <action android:name="flutter.platform.PlatformService" />
+    </intent-filter>
+</service>
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
@@ -82,6 +88,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/subscription_widget_info" />
         </receiver>
+        <receiver
+    android:name=".NotificationReceiver"
+    android:exported="false">
+    <intent-filter>
+        <action android:name="com.truthysystems.wifi.NOTIFICATION_ACTION" />
+    </intent-filter>
+</receiver>
     </application>
 
     <queries>

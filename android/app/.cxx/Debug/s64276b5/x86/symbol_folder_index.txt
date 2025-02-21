@@ -1,0 +1,1 @@
+/home/user/WiFi-Manager/build/app/intermediates/cxx/Debug/s64276b5/obj/x86

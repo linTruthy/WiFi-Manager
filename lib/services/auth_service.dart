@@ -7,7 +7,6 @@ class AuthResult {
   final User? user;
   final String? error;
   final bool requiresVerification;
-
   AuthResult({
     this.user,
     this.error,
@@ -18,29 +17,26 @@ class AuthResult {
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final LocalAuthentication _localAuth = LocalAuthentication();
-
   static const String _persistentLoginKey = 'persistentLogin';
   static const String _userEmailKey = 'userEmail';
+  static const String _userPhoneKey = 'userPhone';
   static const String _sessionTimeKey = 'sessionStartTime';
   static const Duration _sessionTimeout = Duration(hours: 24);
-
-  // Stream to handle session state
   final _authStateController = StreamController<User?>.broadcast();
-  Stream<User?> get authStateChanges => _authStateController.stream;
 
+  Stream<User?> get authStateChanges => _authStateController.stream;
   User? get currentUser => _auth.currentUser;
 
-  // Password validation
   bool isPasswordStrong(String password) {
-    return password.length >= 8 && // Minimum length
-        RegExp(r'[A-Z]').hasMatch(password) && // Has uppercase
-        RegExp(r'[a-z]').hasMatch(password) && // Has lowercase
-        RegExp(r'[0-9]').hasMatch(password) && // Has numbers
-        RegExp(r'[!@#$%^&*(),.?":{}|<>]')
-            .hasMatch(password); // Has special chars
+    return password.length >= 8 &&
+        RegExp(r'[A-Z]').hasMatch(password) &&
+        RegExp(r'[a-z]').hasMatch(password) &&
+        RegExp(r'[0-9]').hasMatch(password) &&
+        RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password);
   }
 
- Future<AuthResult> signInWithPersistence(
+  // Existing email/password sign-in
+  Future<AuthResult> signInWithPersistence(
     String email,
     String password,
     bool rememberMe,
@@ -50,12 +46,10 @@ class AuthService {
         email: email,
         password: password,
       );
-
       final user = userCredential.user;
       if (user == null) {
         return AuthResult(error: 'Failed to sign in');
       }
-
       if (!user.emailVerified) {
         return AuthResult(
           user: user,
@@ -63,14 +57,12 @@ class AuthService {
           error: 'Please verify your email before continuing',
         );
       }
-
       if (rememberMe) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_persistentLoginKey, true);
         await prefs.setString(_userEmailKey, email);
         await _updateSessionTime();
       }
-
       _authStateController.add(user);
       return AuthResult(user: user);
     } on FirebaseAuthException catch (e) {
@@ -78,6 +70,67 @@ class AuthService {
     }
   }
 
+  // New phone number sign-in
+  Future<void> signInWithPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId, int? resendToken) onCodeSent,
+    required Function(AuthResult) onCompleted,
+    Function(String)? onError,
+  }) async {
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          final userCredential = await _auth.signInWithCredential(credential);
+          final user = userCredential.user;
+          if (user != null) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool(_persistentLoginKey, true);
+            await prefs.setString(_userPhoneKey, phoneNumber);
+            await _updateSessionTime();
+            _authStateController.add(user);
+            onCompleted(AuthResult(user: user));
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          onError?.call(_getReadableErrorMessage(e.code));
+        },
+        codeSent: onCodeSent,
+        codeAutoRetrievalTimeout: (String verificationId) {},
+        timeout: const Duration(seconds: 60),
+      );
+    } catch (e) {
+      onError?.call('An unexpected error occurred: $e');
+    }
+  }
+
+  // Verify phone number with SMS code
+  Future<AuthResult> verifyPhoneCode({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+      if (user == null) {
+        return AuthResult(error: 'Failed to sign in');
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_persistentLoginKey, true);
+      await prefs.setString(_userPhoneKey, user.phoneNumber ?? '');
+      await _updateSessionTime();
+      _authStateController.add(user);
+      return AuthResult(user: user);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(error: _getReadableErrorMessage(e.code));
+    }
+  }
+
+  // Existing register with email
   Future<AuthResult> register(String email, String password) async {
     if (!isPasswordStrong(password)) {
       return AuthResult(
@@ -86,21 +139,16 @@ class AuthService {
             'lowercase, numbers, and special characters',
       );
     }
-
     try {
       final result = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-
       final user = result.user;
       if (user == null) {
         return AuthResult(error: 'Registration failed');
       }
-
-      // Send email verification
       await user.sendEmailVerification();
-
       return AuthResult(
         user: user,
         requiresVerification: true,
@@ -111,10 +159,25 @@ class AuthService {
     }
   }
 
+  // New register with phone number (initiates verification)
+  Future<void> registerWithPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId, int? resendToken) onCodeSent,
+    required Function(AuthResult) onCompleted,
+    Function(String)? onError,
+  }) async {
+    await signInWithPhoneNumber(
+      phoneNumber: phoneNumber,
+      onCodeSent: onCodeSent,
+      onCompleted: onCompleted,
+      onError: onError,
+    );
+  }
+
   Future<void> signOut() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear(); // Clear all stored preferences
+      await prefs.clear();
       await _auth.signOut();
       _authStateController.add(null);
     } catch (e) {
@@ -125,24 +188,21 @@ class AuthService {
   Future<bool> authenticateWithBiometrics() async {
     bool canCheckBiometrics = await _localAuth.canCheckBiometrics;
     bool isDeviceSupported = await _localAuth.isDeviceSupported();
-
     if (!canCheckBiometrics || !isDeviceSupported) {
-      // Fallback to password authentication
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString(_userEmailKey);
-      return email != null && await isSessionValid();
+      final phone = prefs.getString(_userPhoneKey);
+      return (email != null || phone != null) && await isSessionValid();
     }
-
     try {
       final authenticated = await _localAuth.authenticate(
         localizedReason: 'Authenticate to access your account',
         options: const AuthenticationOptions(
-          biometricOnly: false, // Allow fallback to device password/PIN
+          biometricOnly: false,
           useErrorDialogs: true,
           stickyAuth: true,
         ),
       );
-
       if (authenticated) {
         await _updateSessionTime();
       }
@@ -173,17 +233,13 @@ class AuthService {
   Future<bool> isSessionValid() async {
     final prefs = await SharedPreferences.getInstance();
     final sessionStartStr = prefs.getString(_sessionTimeKey);
-
     if (sessionStartStr == null) return false;
-
     final sessionStart = DateTime.parse(sessionStartStr);
     final now = DateTime.now();
-
     if (now.difference(sessionStart) > _sessionTimeout) {
       await signOut();
       return false;
     }
-
     return true;
   }
 
@@ -214,6 +270,12 @@ class AuthService {
         return 'Invalid login credentials';
       case 'network-request-failed':
         return 'Network error. Please check your connection';
+      case 'invalid-verification-code':
+        return 'The SMS code entered is invalid';
+      case 'invalid-phone-number':
+        return 'The phone number format is invalid';
+      case 'missing-verification-code':
+        return 'Please enter the SMS code';
       default:
         return 'An error occurred. Please try again';
     }
@@ -225,15 +287,11 @@ class AuthService {
 
   Future<String> getInitialRoute() async {
     try {
-      // Check if user is already signed in
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
-        // No user signed in, check if there's a persistent login
         final prefs = await SharedPreferences.getInstance();
         final hasPersistentLogin = prefs.getBool(_persistentLoginKey) ?? false;
-
         if (hasPersistentLogin) {
-          // Check if the session is still valid
           final isValid = await isSessionValid();
           if (isValid) {
             return '/home';
@@ -241,24 +299,17 @@ class AuthService {
         }
         return '/login';
       }
-
-      // User is signed in, check if email is verified
-      if (!currentUser.emailVerified) {
+      if (currentUser.email != null && !currentUser.emailVerified) {
         return '/verify-email';
       }
-
-      // Check if session is valid
       final isValid = await isSessionValid();
       if (!isValid) {
         await signOut();
         return '/login';
       }
-
       return '/home';
     } catch (e) {
-      // If there's any error, default to login screen
       return '/login';
     }
   }
-
 }

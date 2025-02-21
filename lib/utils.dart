@@ -2,7 +2,6 @@
 
 import 'dart:convert';
 
-import 'database/models/customer.dart';
 import 'database/models/referral_stats.dart';
 
 Duration getRewardDuration(ReferralStats referralStats) {

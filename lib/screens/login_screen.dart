@@ -3,7 +3,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_preferences.dart';
@@ -26,11 +25,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isBiometricEnabled = false;
+  final _phoneController = TextEditingController();
+  final _smsCodeController = TextEditingController();
+  final bool _isBiometricEnabled = false;
   bool _rememberMe = false;
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   String? _errorMessage;
+  bool _usePhone = false;
+  String? _verificationId;
+  int? _resendToken;
+
   @override
   void initState() {
     super.initState();
@@ -47,8 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
-    // _checkBiometricSupport();
-    // _checkPersistentLogin();
+
     _checkSessionAndBiometrics();
   }
 
@@ -70,6 +74,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _controller.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _phoneController.dispose();
+    _smsCodeController.dispose();
     super.dispose();
   }
 
@@ -137,37 +143,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       ),
                                     ),
                                   ),
-                                TextFormField(
-                                  controller: _emailController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Email',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.email),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _passwordController,
-                                  obscureText: !_isPasswordVisible,
-                                  decoration: InputDecoration(
-                                    labelText: 'Password',
-                                    border: const OutlineInputBorder(),
-                                    prefixIcon: const Icon(Icons.lock),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _isPasswordVisible
-                                            ? Icons.visibility_off
-                                            : Icons.visibility,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _isPasswordVisible =
-                                              !_isPasswordVisible;
-                                        });
-                                      },
+                                if (!_usePhone) ...[
+                                  TextFormField(
+                                    controller: _emailController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Email',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.email),
                                     ),
                                   ),
-                                ),
+                                  const SizedBox(height: 16),
+                                  TextFormField(
+                                    controller: _passwordController,
+                                    obscureText: !_isPasswordVisible,
+                                    decoration: InputDecoration(
+                                      labelText: 'Password',
+                                      border: const OutlineInputBorder(),
+                                      prefixIcon: const Icon(Icons.lock),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _isPasswordVisible
+                                              ? Icons.visibility_off
+                                              : Icons.visibility,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _isPasswordVisible =
+                                                !_isPasswordVisible;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ] else ...[
+                                  TextFormField(
+                                    controller: _phoneController,
+                                    decoration: const InputDecoration(
+                                      labelText:
+                                          'Phone Number (e.g., +256123456789)',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.phone),
+                                    ),
+                                    keyboardType: TextInputType.phone,
+                                  ),
+                                  if (_verificationId != null) ...[
+                                    const SizedBox(height: 16),
+                                    TextFormField(
+                                      controller: _smsCodeController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'SMS Code',
+                                        border: OutlineInputBorder(),
+                                        prefixIcon: Icon(Icons.message),
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                    ),
+                                  ],
+                                ],
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
@@ -176,16 +207,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       children: [
                                         Checkbox(
                                           value: _rememberMe,
-                                          onChanged: (value) => setState(
-                                            () => _rememberMe = value ?? false,
-                                          ),
+                                          onChanged: (value) => setState(() =>
+                                              _rememberMe = value ?? false),
                                         ),
                                         const Text('Remember me'),
                                       ],
                                     ),
                                     TextButton(
-                                      onPressed: () =>
-                                          _showResetPasswordDialog(),
+                                      onPressed: _usePhone
+                                          ? null
+                                          : () => _showResetPasswordDialog(),
                                       child: const Text(
                                         'Forgot Password?',
                                         style:
@@ -214,14 +245,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                               strokeWidth: 2,
                                               valueColor:
                                                   AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
-                                              ),
+                                                      Colors.white),
                                             ),
                                           )
-                                        : const Text('Sign In'),
+                                        : Text(_usePhone
+                                            ? (_verificationId == null
+                                                ? 'Send Code'
+                                                : 'Verify Code')
+                                            : 'Sign In'),
                                   ),
                                 ),
                                 const SizedBox(height: 16),
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _usePhone = !_usePhone;
+                                      _verificationId = null;
+                                      _smsCodeController.clear();
+                                      _errorMessage = null;
+                                    });
+                                  },
+                                  child: Text(
+                                    _usePhone
+                                        ? 'Use Email Instead'
+                                        : 'Use Phone Number Instead',
+                                    style: const TextStyle(
+                                        color: Colors.blueAccent),
+                                  ),
+                                ),
                                 if (_isBiometricEnabled)
                                   TextButton(
                                     onPressed: _authenticateWithBiometrics,
@@ -233,7 +284,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     Navigator.pushNamed(context, '/register');
                                   },
                                   child: const Text(
-                                    'Don \'t have an account? Create one',
+                                    'Don\'t have an account? Create one',
                                     style: TextStyle(color: Colors.blueAccent),
                                   ),
                                 ),
@@ -255,40 +306,94 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _login() async {
     if (!_validateInputs()) return;
-
     setState(() => _isLoading = true);
-
     try {
       final authService = ref.read(authServiceProvider);
-      final result = await authService.signInWithPersistence(
-        _emailController.text,
-        _passwordController.text,
-        _rememberMe,
-      );
-
-      if (result.user != null) {
-        if (result.requiresVerification) {
-          _showVerificationDialog();
+      if (_usePhone) {
+        if (_verificationId == null) {
+          // Send verification code
+          await authService.signInWithPhoneNumber(
+            phoneNumber: _phoneController.text,
+            onCodeSent: (verificationId, resendToken) {
+              setState(() {
+                _verificationId = verificationId;
+                _resendToken = resendToken;
+                _isLoading = false;
+              });
+            },
+            onCompleted: (result) {
+              if (result.user != null) {
+                _navigateToHome();
+              }
+              setState(() => _isLoading = false);
+            },
+            onError: (error) {
+              _showErrorSnackbar(error);
+              setState(() => _isLoading = false);
+            },
+          );
         } else {
-          _navigateToHome();
+          // Verify SMS code
+          final result = await authService.verifyPhoneCode(
+            verificationId: _verificationId!,
+            smsCode: _smsCodeController.text,
+          );
+          if (result.user != null) {
+            _navigateToHome();
+          } else {
+            _showErrorSnackbar(result.error ?? 'Verification failed');
+          }
+          setState(() => _isLoading = false);
         }
       } else {
-        _showErrorSnackbar(result.error ?? 'Login failed');
+        // Email/password login
+        final result = await authService.signInWithPersistence(
+          _emailController.text,
+          _passwordController.text,
+          _rememberMe,
+        );
+        if (result.user != null) {
+          if (result.requiresVerification) {
+            _showVerificationDialog();
+          } else {
+            _navigateToHome();
+          }
+        } else {
+          _showErrorSnackbar(result.error ?? 'Login failed');
+        }
+        setState(() => _isLoading = false);
       }
-    } finally {
+    } catch (e) {
+      _showErrorSnackbar('An unexpected error occurred: $e');
       setState(() => _isLoading = false);
     }
   }
 
   bool _validateInputs() {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      _showErrorSnackbar('Please fill in all fields');
-      return false;
-    }
-    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-        .hasMatch(_emailController.text)) {
-      _showErrorSnackbar('Please enter a valid email');
-      return false;
+    if (_usePhone) {
+      if (_phoneController.text.isEmpty) {
+        _showErrorSnackbar('Please enter a phone number');
+        return false;
+      }
+      if (_verificationId != null && _smsCodeController.text.isEmpty) {
+        _showErrorSnackbar('Please enter the SMS code');
+        return false;
+      }
+      if (!RegExp(r'^\+\d{9,15}$').hasMatch(_phoneController.text)) {
+        _showErrorSnackbar(
+            'Please enter a valid phone number (e.g., +256123456789)');
+        return false;
+      }
+    } else {
+      if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+        _showErrorSnackbar('Please fill in all fields');
+        return false;
+      }
+      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+          .hasMatch(_emailController.text)) {
+        _showErrorSnackbar('Please enter a valid email');
+        return false;
+      }
     }
     return true;
   }
@@ -484,6 +589,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _smsCodeController = TextEditingController();
+  bool _usePhone = false;
+  String? _verificationId;
+  int? _resendToken;
 
   @override
   void initState() {
@@ -508,6 +618,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     _controller.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _phoneController.dispose();
+    _smsCodeController.dispose();
     super.dispose();
   }
 
@@ -552,50 +664,112 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 24),
-                                TextFormField(
-                                  controller: _emailController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Email',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.email),
+                                if (!_usePhone) ...[
+                                  TextFormField(
+                                    controller: _emailController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Email',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.email),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _passwordController,
-                                  obscureText: true,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Password',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.lock),
+                                  const SizedBox(height: 16),
+                                  TextFormField(
+                                    controller: _passwordController,
+                                    obscureText: true,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Password',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.lock),
+                                    ),
                                   ),
-                                ),
+                                ] else ...[
+                                  TextFormField(
+                                    controller: _phoneController,
+                                    decoration: const InputDecoration(
+                                      labelText:
+                                          'Phone Number (e.g., +256123456789)',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.phone),
+                                    ),
+                                    keyboardType: TextInputType.phone,
+                                  ),
+                                  if (_verificationId != null) ...[
+                                    const SizedBox(height: 16),
+                                    TextFormField(
+                                      controller: _smsCodeController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'SMS Code',
+                                        border: OutlineInputBorder(),
+                                        prefixIcon: Icon(Icons.message),
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                    ),
+                                  ],
+                                ],
                                 const SizedBox(height: 24),
                                 ElevatedButton(
                                   onPressed: () async {
-                                    final authService = ref.read(
-                                      authServiceProvider,
-                                    );
-                                    final user = await authService.register(
-                                      _emailController.text,
-                                      _passwordController.text,
-                                    );
-                                    if (user != null) {
-                                      await AppPreferences.setNotFirstTime();
-                                      Navigator.pushReplacementNamed(
-                                        context,
-                                        '/home',
-                                      );
+                                    final authService =
+                                        ref.read(authServiceProvider);
+                                    if (_usePhone) {
+                                      if (_verificationId == null) {
+                                        await authService
+                                            .registerWithPhoneNumber(
+                                          phoneNumber: _phoneController.text,
+                                          onCodeSent:
+                                              (verificationId, resendToken) {
+                                            setState(() {
+                                              _verificationId = verificationId;
+                                              _resendToken = resendToken;
+                                            });
+                                          },
+                                          onCompleted: (result) {
+                                            if (result.user != null) {
+                                              AppPreferences.setNotFirstTime();
+                                              Navigator.pushReplacementNamed(
+                                                  context, '/home');
+                                            }
+                                          },
+                                          onError: (error) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                  content: Text(error ??
+                                                      'Failed to register')),
+                                            );
+                                          },
+                                        );
+                                      } else {
+                                        final result =
+                                            await authService.verifyPhoneCode(
+                                          verificationId: _verificationId!,
+                                          smsCode: _smsCodeController.text,
+                                        );
+                                        if (result.user != null) {
+                                          await AppPreferences
+                                              .setNotFirstTime();
+                                          Navigator.pushReplacementNamed(
+                                              context, '/home');
+                                        } else {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                                content: Text(result.error ??
+                                                    'Verification failed')),
+                                          );
+                                        }
+                                      }
                                     } else {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Registration failed. Please try again.',
-                                          ),
-                                        ),
+                                      final user = await authService.register(
+                                        _emailController.text,
+                                        _passwordController.text,
                                       );
+                                      if (user.user != null) {
+                                        await AppPreferences.setNotFirstTime();
+                                        Navigator.pushReplacementNamed(
+                                            context, '/home');
+                                      }
                                     }
                                   },
                                   style: ElevatedButton.styleFrom(
@@ -605,7 +779,28 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                     ),
                                     backgroundColor: Colors.black54,
                                   ),
-                                  child: const Text('Sign Up'),
+                                  child: Text(_usePhone
+                                      ? (_verificationId == null
+                                          ? 'Send Code'
+                                          : 'Verify Code')
+                                      : 'Sign Up'),
+                                ),
+                                const SizedBox(height: 16),
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _usePhone = !_usePhone;
+                                      _verificationId = null;
+                                      _smsCodeController.clear();
+                                    });
+                                  },
+                                  child: Text(
+                                    _usePhone
+                                        ? 'Use Email Instead'
+                                        : 'Use Phone Number Instead',
+                                    style: const TextStyle(
+                                        color: Colors.blueAccent),
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                                 TextButton(

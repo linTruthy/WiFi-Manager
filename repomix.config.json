@@ -16,7 +16,7 @@
   "ignore": {
     "useGitignore": true,
     "useDefaultPatterns": true,
-    "customPatterns": ["*.g.dart"]
+    "customPatterns": ["**.g.dart","**/widgets","**.png","**.mp3"]
   },
   "security": {
     "enableSecurityCheck": true

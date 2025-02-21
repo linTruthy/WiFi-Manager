@@ -10,12 +10,11 @@ import androidx.annotation.NonNull
 import org.json.JSONObject
 import java.util.*
 
-class MainActivity: FlutterFragmentActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.truthysystems.wifi/subscription_widget"
+
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-        // First method channel for wifi functionality
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "truthy.systems/wifi")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -33,30 +32,27 @@ class MainActivity: FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
-
-        // Second method channel for subscription widget
-         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "updateSubscriptionWidget" -> {
                     try {
-                        // Extract the data from the method call
                         val arguments = call.arguments as Map<*, *>
                         val expiringCustomers = (arguments["expiringCustomers"] as List<*>).map { customer ->
                             val customerMap = customer as Map<*, *>
                             JSONObject().apply {
                                 put("name", customerMap["name"])
                                 put("daysLeft", customerMap["daysLeft"])
+                                put("id", customerMap["id"]) // Ensure ID is included for navigation
                             }
                         }
                         val activeCustomersCount = arguments["activeCustomersCount"] as Int
-
-                        // Update the widget using the companion object method
+                        val newRevenue = (arguments["totalRevenue"] as? Double) ?: 0.0 // Default to 0.0 if not provided
                         SubscriptionWidgetProvider.updateData(
                             context = this,
                             newExpiringCustomers = expiringCustomers,
-                            newActiveCount = activeCustomersCount
+                            newActiveCount = activeCustomersCount,
+                            newRevenue = newRevenue
                         )
-
                         result.success(null)
                     } catch (e: Exception) {
                         result.error("WIDGET_UPDATE_ERROR", e.message, null)
@@ -68,6 +64,7 @@ class MainActivity: FlutterFragmentActivity() {
             }
         }
     }
+
     private fun resourceToUriString(context: Context, resId: Int): String? {
         return (ContentResolver.SCHEME_ANDROID_RESOURCE + "://"
                 + context.resources.getResourcePackageName(resId)

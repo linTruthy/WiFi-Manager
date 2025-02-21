@@ -26,15 +26,9 @@ final filteredPaymentsProvider = FutureProvider<List<Payment>>((ref) async {
 final paymentSummaryProvider = FutureProvider<Map<String, double>>((ref) async {
   final payments = await ref.watch(filteredPaymentsProvider.future);
   return {
-    'daily': payments
-        .where((p) => p.planType == PlanType.daily)
-        .fold(0, (sum, p) => sum + p.amount),
-    'weekly': payments
-        .where((p) => p.planType == PlanType.weekly)
-        .fold(0, (sum, p) => sum + p.amount),
-    'monthly': payments
-        .where((p) => p.planType == PlanType.monthly)
-        .fold(0, (sum, p) => sum + p.amount),
+    'daily': payments.where((p) => p.planType == PlanType.daily).fold(0, (sum, p) => sum + p.amount),
+    'weekly': payments.where((p) => p.planType == PlanType.weekly).fold(0, (sum, p) => sum + p.amount),
+    'monthly': payments.where((p) => p.planType == PlanType.monthly).fold(0, (sum, p) => sum + p.amount),
     'total': payments.fold(0, (sum, p) => sum + p.amount),
   };
 });

@@ -5,6 +5,7 @@ import '../database/models/customer.dart';
 import '../providers/customer_provider.dart';
 import '../providers/database_provider.dart';
 import '../services/subscription_notification_service.dart';
+import '../widgets/add_payment_dialog.dart'; // Import AddPaymentDialog
 
 class InactiveCustomersScreen extends ConsumerWidget {
   const InactiveCustomersScreen({super.key});
@@ -39,46 +40,10 @@ class InactiveCustomersScreen extends ConsumerWidget {
                   );
                 },
                 onActivate: () async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder:
-                        (context) => AlertDialog(
-                          title: const Text('Activate Customer'),
-                          content: Text(
-                            'Are you sure you want to activate ${customer.name}?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Activate'),
-                            ),
-                          ],
-                        ),
-                  );
-
-                  if (confirmed == true) {
-                    final database = ref.read(databaseProvider);
-                    await database.activateCustomer(customer.id);
-                    ref.invalidate(inactiveCustomersProvider);
-                    ref.invalidate(activeCustomersProvider);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('${customer.name} has been activated'),
-                      ),
-                    );
-
-                    // Notify the customer
-                    final message =
-                        'Your subscription has been reactivated. Thank you for choosing our services!';
-                    await SubscriptionNotificationService.scheduleExpirationNotification(
-                      customer,
-                    );
-                    print('Notification sent to ${customer.name}: $message');
-                  }
+                  await _activateCustomer(context, ref, customer);
+                },
+                onAddPaymentAndActivate: () async {
+                  await _addPaymentAndActivate(context, ref, customer);
                 },
               );
             },
@@ -89,17 +54,77 @@ class InactiveCustomersScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _activateCustomer(
+      BuildContext context, WidgetRef ref, Customer customer) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Activate Customer'),
+        content: Text('Are you sure you want to activate ${customer.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Activate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final database = ref.read(databaseProvider);
+      await database.activateCustomer(customer.id);
+      ref.invalidate(inactiveCustomersProvider);
+      ref.invalidate(activeCustomersProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${customer.name} has been activated')),
+      );
+      final message =
+          'Your subscription has been reactivated. Thank you for choosing our services!';
+      await SubscriptionNotificationService.scheduleExpirationNotification(
+          customer);
+      print('Notification sent to ${customer.name}: $message');
+    }
+  }
+
+  Future<void> _addPaymentAndActivate(
+      BuildContext context, WidgetRef ref, Customer customer) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AddPaymentDialog(customer: customer),
+    );
+    if (result == true) {
+      final database = ref.read(databaseProvider);
+      await database.activateCustomer(customer.id);
+      ref.invalidate(inactiveCustomersProvider);
+      ref.invalidate(activeCustomersProvider);
+      ref.invalidate(recentPaymentsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${customer.name} has been activated and payment added')),
+      );
+      final message =
+          'Your subscription has been reactivated with a new payment. Thank you!';
+      await SubscriptionNotificationService.scheduleExpirationNotification(
+          customer);
+      print('Notification sent to ${customer.name}: $message');
+    }
+  }
 }
 
 class _InactiveCustomerTile extends StatelessWidget {
   final Customer customer;
   final Function(bool) onDelete;
   final VoidCallback onActivate;
+  final VoidCallback onAddPaymentAndActivate;
 
   const _InactiveCustomerTile({
     required this.customer,
     required this.onDelete,
     required this.onActivate,
+    required this.onAddPaymentAndActivate,
   });
 
   @override
@@ -111,25 +136,30 @@ class _InactiveCustomerTile extends StatelessWidget {
         subtitle: Text(
           'Expired: ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}',
         ),
-        trailing: PopupMenuButton(
-          itemBuilder:
-              (context) => [
-                const PopupMenuItem(
-                  value: 'activate',
-                  child: Text('Activate Customer'),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete Customer'),
-                ),
-                const PopupMenuItem(
-                  value: 'delete_with_data',
-                  child: Text('Delete Customer with All Data'),
-                ),
-              ],
+        trailing: PopupMenuButton<String>(
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'activate',
+              child: Text('Activate Customer'),
+            ),
+            const PopupMenuItem(
+              value: 'add_payment_and_activate',
+              child: Text('Add Payment & Activate'),
+            ),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Text('Delete Customer'),
+            ),
+            const PopupMenuItem(
+              value: 'delete_with_data',
+              child: Text('Delete Customer with All Data'),
+            ),
+          ],
           onSelected: (value) {
             if (value == 'activate') {
               onActivate();
+            } else if (value == 'add_payment_and_activate') {
+              onAddPaymentAndActivate();
             } else if (value == 'delete') {
               onDelete(false);
             } else if (value == 'delete_with_data') {

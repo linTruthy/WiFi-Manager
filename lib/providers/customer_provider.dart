@@ -11,6 +11,10 @@ final customerProvider = FutureProvider.family<Customer?, String>((
   final isar = await database.db;
   return await isar.customers.get(int.parse(customerId));
 });
+// final inactiveCustomersProvider = FutureProvider<List<Customer>>((ref) async {
+//   final database = ref.watch(databaseProvider);
+//   return database.getInactiveCustomers();
+// });
 final inactiveCustomersProvider = FutureProvider<List<Customer>>((ref) async {
   final database = ref.watch(databaseProvider);
   return database.getInactiveCustomers();

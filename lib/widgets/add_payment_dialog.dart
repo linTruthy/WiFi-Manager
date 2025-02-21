@@ -12,9 +12,11 @@ import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/syncing_provider.dart';
+import '../services/subscription_notification_service.dart';
 
 class AddPaymentDialog extends ConsumerStatefulWidget {
-  const AddPaymentDialog({super.key});
+  final Customer? customer; // Optional pre-selected customer
+  const AddPaymentDialog({super.key, this.customer});
 
   @override
   ConsumerState<AddPaymentDialog> createState() => _AddPaymentDialogState();
@@ -28,6 +30,22 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
   DateTime _startDate = DateTime.now();
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.customer != null) {
+      _selectedCustomerId = widget.customer!.id.toString();
+      _selectedPlan = widget.customer!.planType;
+      _updateAmount(); // Set default amount based on plan
+    }
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(activeCustomersProvider);
 
@@ -39,31 +57,37 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              customersAsync.when(
-                data:
-                    (customers) => DropdownButtonFormField<String>(
-                      value: _selectedCustomerId,
-                      decoration: const InputDecoration(
-                        labelText: 'Customer',
-                        border: OutlineInputBorder(),
-                      ),
-                      items:
-                          customers.map((customer) {
-                            return DropdownMenuItem(
-                              value: customer.id.toString(),
-                              child: Text(customer.name),
-                            );
-                          }).toList(),
-                      onChanged:
-                          (value) =>
-                              setState(() => _selectedCustomerId = value),
-                      validator:
-                          (value) =>
-                              value == null ? 'Please select a customer' : null,
+              if (widget.customer ==
+                  null) // Show dropdown only if no customer provided
+                customersAsync.when(
+                  data: (customers) => DropdownButtonFormField<String>(
+                    value: _selectedCustomerId,
+                    decoration: const InputDecoration(
+                      labelText: 'Customer',
+                      border: OutlineInputBorder(),
                     ),
-                loading: () => const CircularProgressIndicator(),
-                error: (_, __) => const Text('Error loading customers'),
-              ),
+                    items: customers.map((customer) {
+                      return DropdownMenuItem(
+                        value: customer.id.toString(),
+                        child: Text(customer.name),
+                      );
+                    }).toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedCustomerId = value),
+                    validator: (value) =>
+                        value == null ? 'Please select a customer' : null,
+                  ),
+                  loading: () => const CircularProgressIndicator(),
+                  error: (_, __) => const Text('Error loading customers'),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    'Customer: ${widget.customer!.name}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
               const SizedBox(height: 16),
               InkWell(
                 onTap: () => _selectStartDate(context),
@@ -77,7 +101,6 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                     children: [
                       Text(
                         DateFormat('yyyy-MM-dd hh:mm a').format(_startDate),
-                        //'${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}',
                       ),
                       const Icon(Icons.calendar_today),
                     ],
@@ -91,13 +114,12 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                   labelText: 'Plan Type',
                   border: OutlineInputBorder(),
                 ),
-                items:
-                    PlanType.values.map((plan) {
-                      return DropdownMenuItem(
-                        value: plan,
-                        child: Text(plan.name),
-                      );
-                    }).toList(),
+                items: PlanType.values.map((plan) {
+                  return DropdownMenuItem(
+                    value: plan,
+                    child: Text(plan.name),
+                  );
+                }).toList(),
                 onChanged: (value) {
                   if (value != null) {
                     setState(() => _selectedPlan = value);
@@ -111,15 +133,16 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Amount',
                   border: OutlineInputBorder(),
-                  prefixText: 'UGX',
+                  prefixText: 'UGX ',
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter an amount';
                   }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
+                  if (double.tryParse(value) == null ||
+                      double.parse(value) <= 0) {
+                    return 'Please enter a valid positive number';
                   }
                   return null;
                 },
@@ -147,7 +170,6 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
     );
 
     if (pickedDate != null) {
-      // Show time picker after date is selected
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(_startDate),
@@ -198,14 +220,14 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
     }
   }
 
-  void _savePayment() async {
+  Future<void> _savePayment() async {
     if (_formKey.currentState?.validate() ?? false) {
       try {
-        final isar = await ref.read(databaseProvider).db;
+        final database = ref.read(databaseProvider);
+        final isar = await database.db;
         await isar.writeTxn(() async {
-          final customer = await isar.customers.get(
-            int.parse(_selectedCustomerId!),
-          );
+          final customer =
+              await isar.customers.get(int.parse(_selectedCustomerId!));
           if (customer == null) throw Exception('Customer not found');
 
           // Create payment record
@@ -216,7 +238,6 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
             planType: _selectedPlan,
             isConfirmed: true,
           );
-          //  await isar.payments.put(payment);
           await isar.payments.put(payment);
           await isar.syncStatus.put(
             SyncStatus(
@@ -226,27 +247,27 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
               timestamp: DateTime.now(),
             ),
           );
-          await ref.read(databaseProvider).pushPayment(payment);
+          await database.pushPayment(payment);
 
+          // Update customer subscription and activate if inactive
           customer.subscriptionStart = _startDate;
-          customer.subscriptionEnd = _calculateEndDate(
-            _startDate,
-            _selectedPlan,
-          );
+          customer.subscriptionEnd =
+              _calculateEndDate(_startDate, _selectedPlan);
           customer.planType = _selectedPlan;
+          if (!customer.isActive) {
+            customer.isActive = true; // Activate the customer
+          }
 
-          // Generate WiFi credentials if this is the first subscription
-          final previousPayments =
-              await isar.payments
-                  .filter()
-                  .customerIdEqualTo(_selectedCustomerId!)
-                  .findAll();
-
-          if (previousPayments.length <= 1) {
-            // Including the payment we just created
+          // Generate WiFi credentials if first payment or reactivating
+          final previousPayments = await isar.payments
+              .filter()
+              .customerIdEqualTo(_selectedCustomerId!)
+              .findAll();
+          if (previousPayments.length <= 1 || !customer.isActive) {
             customer.wifiName = Customer.generateWifiName(customer.name);
             customer.currentPassword = Customer.generate();
           }
+
           await isar.customers.put(customer);
           await isar.syncStatus.put(
             SyncStatus(
@@ -256,48 +277,52 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
               timestamp: DateTime.now(),
             ),
           );
-          await ref.read(databaseProvider).pushCustomer(customer);
+          await database.pushCustomer(customer);
         });
 
         if (mounted) {
-          Navigator.pop(context);
+          final customer =
+              await isar.customers.get(int.parse(_selectedCustomerId!));
+          Navigator.pop(context, true); // Return true to indicate success
+          // Invalidate providers to refresh UI
           ref.invalidate(recentPaymentsProvider);
           ref.invalidate(paymentSummaryProvider);
           ref.invalidate(filteredPaymentsProvider);
           ref.invalidate(activeCustomersProvider);
+          ref.invalidate(inactiveCustomersProvider); // For reactivation
           ref.invalidate(expiringCustomersProvider);
           ref.invalidate(syncingProvider);
-
           ref.invalidate(databaseProvider);
           ref.invalidate(customerProvider);
           ref.invalidate(expiringSubscriptionsProvider);
           ref.invalidate(notificationSchedulerProvider);
-          // Show WiFi credentials in a dialog
-          final customer = await isar.customers.get(
-            int.parse(_selectedCustomerId!),
-          );
+
           if (customer != null) {
+            // Schedule notification for the updated subscription
+            await SubscriptionNotificationService
+                .scheduleExpirationNotification(customer);
+
+            // Show WiFi credentials dialog
             showDialog(
               context: context,
-              builder:
-                  (context) => AlertDialog(
-                    title: const Text('WiFi Credentials'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SelectableText('WiFi Name: ${customer.wifiName}'),
-                        const SizedBox(height: 8),
-                        SelectableText('Password: ${customer.currentPassword}'),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('OK'),
-                      ),
-                    ],
+              builder: (context) => AlertDialog(
+                title: const Text('WiFi Credentials'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SelectableText('WiFi Name: ${customer.wifiName}'),
+                    const SizedBox(height: 8),
+                    SelectableText('Password: ${customer.currentPassword}'),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
                   ),
+                ],
+              ),
             );
           }
         }
@@ -305,10 +330,9 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: SelectableText(
-                'Error recording payment: $e | $stackTrace',
-              ),
-              duration: Duration(minutes: 3),
+              content:
+                  SelectableText('Error recording payment: $e | $stackTrace'),
+              duration: const Duration(minutes: 3),
             ),
           );
         }
