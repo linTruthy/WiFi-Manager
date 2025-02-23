@@ -24,7 +24,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   final AdManager _adManager = AdManager();
-  String _filter = 'This Month'; // Default filter
+  String _filter = 'This Month';
+
   @override
   void initState() {
     super.initState();
@@ -32,14 +33,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-
     _controller.forward();
-    // Initialize ads
     _initializeAds();
-
-    // Schedule periodic interstitial ad preloading
     Timer.periodic(const Duration(minutes: 2), (timer) {
       _adManager.initializeInterstitialAd();
+    });
+
+    // Move invalidation to initState
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(expiringSubscriptionsProvider);
+      ref.invalidate(activeCustomersProvider);
+      ref.invalidate(paymentSummaryProvider);
     });
   }
 
@@ -60,15 +64,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     final authService = ref.read(authServiceProvider);
     if (authService.currentUser == null) return const LoginScreen();
-    ref.invalidate(expiringSubscriptionsProvider);
-    ref.invalidate(activeCustomersProvider);
-    ref.invalidate(paymentSummaryProvider);
-    // ref.watch(databaseProvider).syncPendingChanges();
-    // ref.watch(databaseProvider).scheduleNotifications();
-    // final isSyncing = ref.watch(syncingProvider);
+
     final activeCustomers =
         ref.watch(activeCustomersProvider); // Watch the FutureProvider
     final expiringSubscriptions = ref.watch(expiringSubscriptionsProvider);
+   
     ref.listen(expiringSubscriptionsProvider, (previous, next) {
       next.whenData((customers) {
         activeCustomers.whenData((activeCount) {
@@ -84,6 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         });
       });
     });
+    
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       extendBodyBehindAppBar: true,

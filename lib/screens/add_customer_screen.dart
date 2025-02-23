@@ -116,6 +116,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         referredBy: _referralCodeController.text.isNotEmpty
             ? await _getCustomerIdByReferralCode(_referralCodeController.text)
             : null,
+        
       );
 
       try {

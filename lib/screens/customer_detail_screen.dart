@@ -35,7 +35,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     // Initialize two banner ads for different positions
     await _adManager.initializeBannerAd(
       size: AdSize.banner,
-      adUnitId: 'your_banner_ad_unit_id_here',
+      adUnitId: 'ca-app-pub-8267064683737776/9972219205',
     );
 
     // Initialize interstitial ad
@@ -62,8 +62,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   }
 
   void _shareCustomerLink() {
-  
-    final link = generateShareableLink(widget.customer.id.toString(), widget.customer.subscriptionEnd);
+    final link = generateShareableLink(
+        widget.customer.id.toString(), widget.customer.subscriptionEnd);
+    print(link);
     Share.share('View my WiFi subscription details: $link');
   }
 

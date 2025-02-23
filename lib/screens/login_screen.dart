@@ -3,9 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../services/app_preferences.dart';
 import '../services/auth_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
@@ -27,14 +25,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _passwordController = TextEditingController();
   final _phoneController = TextEditingController();
   final _smsCodeController = TextEditingController();
-  final bool _isBiometricEnabled = false;
-  bool _rememberMe = false;
+  bool _rememberMe = true; // Default to true for persistence
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   String? _errorMessage;
   bool _usePhone = false;
   String? _verificationId;
   int? _resendToken;
+  bool _canUseBiometrics = false;
 
   @override
   void initState() {
@@ -58,14 +56,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _checkSessionAndBiometrics() async {
     final authService = ref.read(authServiceProvider);
+    final canCheckBiometrics = await authService.localAuth.canCheckBiometrics;
+    final isDeviceSupported = await authService.localAuth.isDeviceSupported();
+    setState(() => _canUseBiometrics = canCheckBiometrics && isDeviceSupported);
 
-    // Check if there's a valid session
     if (await authService.isSessionValid()) {
-      // Try biometric authentication if available
-      final isAuthenticated = await authService.authenticateWithBiometrics();
-      if (isAuthenticated) {
+      if (_canUseBiometrics) {
+        _promptBiometricAuth();
+      } else {
         _navigateToHome();
       }
+    }
+  }
+
+  Future<void> _promptBiometricAuth() async {
+    final authService = ref.read(authServiceProvider);
+    final authenticated = await authService.authenticateWithBiometrics();
+    if (authenticated) {
+      _navigateToHome();
+    } else {
+      setState(() => _errorMessage =
+          'Biometric authentication failed. Please sign in manually.');
     }
   }
 
@@ -109,18 +120,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 const Text(
                                   'Welcome Back!',
                                   style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
                                   'Sign in to manage your WiFi subscriptions and customers.',
                                   style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
+                                      color: Colors.white70, fontSize: 14),
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 24),
@@ -132,15 +140,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       color: Colors.red.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                        color: Colors.red.withOpacity(0.3),
-                                      ),
+                                          color: Colors.red.withOpacity(0.3)),
                                     ),
                                     child: Text(
                                       _errorMessage!,
                                       style: const TextStyle(
-                                        color: Colors.red,
-                                        fontSize: 14,
-                                      ),
+                                          color: Colors.red, fontSize: 14),
                                     ),
                                   ),
                                 if (!_usePhone) ...[
@@ -161,17 +166,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       border: const OutlineInputBorder(),
                                       prefixIcon: const Icon(Icons.lock),
                                       suffixIcon: IconButton(
-                                        icon: Icon(
-                                          _isPasswordVisible
-                                              ? Icons.visibility_off
-                                              : Icons.visibility,
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
+                                        icon: Icon(_isPasswordVisible
+                                            ? Icons.visibility_off
+                                            : Icons.visibility),
+                                        onPressed: () => setState(() =>
                                             _isPasswordVisible =
-                                                !_isPasswordVisible;
-                                          });
-                                        },
+                                                !_isPasswordVisible),
                                       ),
                                     ),
                                   ),
@@ -210,19 +210,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                           onChanged: (value) => setState(() =>
                                               _rememberMe = value ?? false),
                                         ),
-                                        const Text('Remember me'),
+                                        const Text('Stay Signed In'),
                                       ],
                                     ),
-                                    TextButton(
-                                      onPressed: _usePhone
-                                          ? null
-                                          : () => _showResetPasswordDialog(),
-                                      child: const Text(
-                                        'Forgot Password?',
-                                        style:
-                                            TextStyle(color: Colors.blueAccent),
+                                    if (!_usePhone)
+                                      TextButton(
+                                        onPressed: _showResetPasswordDialog,
+                                        child: const Text('Forgot Password?',
+                                            style: TextStyle(
+                                                color: Colors.blueAccent)),
                                       ),
-                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 24),
@@ -232,9 +229,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     onPressed: _isLoading ? null : _login,
                                     style: ElevatedButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 32,
-                                        vertical: 16,
-                                      ),
+                                          horizontal: 32, vertical: 16),
                                       backgroundColor: Colors.black54,
                                     ),
                                     child: _isLoading
@@ -242,11 +237,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                             height: 20,
                                             width: 20,
                                             child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                      Colors.white),
-                                            ),
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                        Color>(Colors.white)),
                                           )
                                         : Text(_usePhone
                                             ? (_verificationId == null
@@ -273,20 +267,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         color: Colors.blueAccent),
                                   ),
                                 ),
-                                if (_isBiometricEnabled)
+                                if (_canUseBiometrics)
                                   TextButton(
-                                    onPressed: _authenticateWithBiometrics,
-                                    child: const Text('Use Biometrics'),
+                                    onPressed: _promptBiometricAuth,
+                                    child: const Text('Use Biometrics',
+                                        style: TextStyle(
+                                            color: Colors.blueAccent)),
                                   ),
                                 const SizedBox(height: 16),
                                 TextButton(
-                                  onPressed: () {
-                                    Navigator.pushNamed(context, '/register');
-                                  },
+                                  onPressed: () =>
+                                      Navigator.pushNamed(context, '/register'),
                                   child: const Text(
-                                    'Don\'t have an account? Create one',
-                                    style: TextStyle(color: Colors.blueAccent),
-                                  ),
+                                      'Don\'t have an account? Create one',
+                                      style:
+                                          TextStyle(color: Colors.blueAccent)),
                                 ),
                               ],
                             ),
@@ -304,14 +299,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Future<void> _login() async {
+ Future<void> _login() async {
     if (!_validateInputs()) return;
     setState(() => _isLoading = true);
     try {
       final authService = ref.read(authServiceProvider);
       if (_usePhone) {
         if (_verificationId == null) {
-          // Send verification code
           await authService.signInWithPhoneNumber(
             phoneNumber: _phoneController.text,
             onCodeSent: (verificationId, resendToken) {
@@ -322,9 +316,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               });
             },
             onCompleted: (result) {
-              if (result.user != null) {
-                _navigateToHome();
-              }
+              if (result.user != null) _navigateToHome();
               setState(() => _isLoading = false);
             },
             onError: (error) {
@@ -333,7 +325,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             },
           );
         } else {
-          // Verify SMS code
           final result = await authService.verifyPhoneCode(
             verificationId: _verificationId!,
             smsCode: _smsCodeController.text,
@@ -346,7 +337,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           setState(() => _isLoading = false);
         }
       } else {
-        // Email/password login
         final result = await authService.signInWithPersistence(
           _emailController.text,
           _passwordController.text,
@@ -398,22 +388,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return true;
   }
 
-  void _showVerificationDialog() {
+ void _showVerificationDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Verify Your Email'),
-        content: const Text(
-            'Please check your email and verify your account before continuing.'),
+        content: const Text('Please check your email and verify your account before continuing.'),
         actions: [
           TextButton(
             onPressed: () async {
               final authService = ref.read(authServiceProvider);
               await authService.verifyEmail();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Verification email sent')),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification email sent')));
             },
             child: const Text('Resend Email'),
           ),
@@ -425,7 +412,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
     );
   }
-
   void _showResetPasswordDialog() {
     showDialog(
       context: context,
@@ -433,10 +419,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         title: const Text('Reset Password'),
         content: TextField(
           controller: _emailController,
-          decoration: const InputDecoration(
-            labelText: 'Email',
-            hintText: 'Enter your email address',
-          ),
+          decoration: const InputDecoration(labelText: 'Email', hintText: 'Enter your email address'),
         ),
         actions: [
           TextButton(
@@ -445,15 +428,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 final authService = ref.read(authServiceProvider);
                 await authService.resetPassword(_emailController.text);
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password reset email sent'),
-                  ),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset email sent')));
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.toString())),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
               }
             },
             child: const Text('Send Reset Link'),
@@ -471,20 +448,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     Navigator.pushReplacementNamed(context, '/home');
   }
 
-  Future<void> _authenticateWithBiometrics() async {
-    final authService = ref.read(authServiceProvider);
-    final isAuthenticated = await authService.authenticateWithBiometrics();
-
-    if (isAuthenticated) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Biometric authentication failed.')),
-      );
-    }
-  }
 }
 
 class _AnimatedBackground extends StatefulWidget {
@@ -593,7 +556,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   final _smsCodeController = TextEditingController();
   bool _usePhone = false;
   String? _verificationId;
-  int? _resendToken;
+ 
 
   @override
   void initState() {
@@ -623,7 +586,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     super.dispose();
   }
 
-  @override
+ @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
@@ -648,19 +611,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                               children: [
                                 const Text(
                                   'Create an Account',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
+                                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
                                   'Join us to manage your WiFi subscriptions and customers with ease.',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
+                                  style: TextStyle(color: Colors.white70, fontSize: 14),
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 24),
@@ -687,8 +643,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                   TextFormField(
                                     controller: _phoneController,
                                     decoration: const InputDecoration(
-                                      labelText:
-                                          'Phone Number (e.g., +256123456789)',
+                                      labelText: 'Phone Number (e.g., +256123456789)',
                                       border: OutlineInputBorder(),
                                       prefixIcon: Icon(Icons.phone),
                                     ),
@@ -710,53 +665,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                 const SizedBox(height: 24),
                                 ElevatedButton(
                                   onPressed: () async {
-                                    final authService =
-                                        ref.read(authServiceProvider);
+                                    final authService = ref.read(authServiceProvider);
                                     if (_usePhone) {
                                       if (_verificationId == null) {
-                                        await authService
-                                            .registerWithPhoneNumber(
+                                        await authService.registerWithPhoneNumber(
                                           phoneNumber: _phoneController.text,
-                                          onCodeSent:
-                                              (verificationId, resendToken) {
+                                          onCodeSent: (verificationId, resendToken) {
                                             setState(() {
                                               _verificationId = verificationId;
-                                              _resendToken = resendToken;
                                             });
                                           },
                                           onCompleted: (result) {
                                             if (result.user != null) {
-                                              AppPreferences.setNotFirstTime();
-                                              Navigator.pushReplacementNamed(
-                                                  context, '/home');
+                                              Navigator.pushReplacementNamed(context, '/home');
                                             }
                                           },
                                           onError: (error) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                  content: Text(error ??
-                                                      'Failed to register')),
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text(error ?? 'Failed to register')),
                                             );
                                           },
                                         );
                                       } else {
-                                        final result =
-                                            await authService.verifyPhoneCode(
+                                        final result = await authService.verifyPhoneCode(
                                           verificationId: _verificationId!,
                                           smsCode: _smsCodeController.text,
                                         );
                                         if (result.user != null) {
-                                          await AppPreferences
-                                              .setNotFirstTime();
-                                          Navigator.pushReplacementNamed(
-                                              context, '/home');
+                                          Navigator.pushReplacementNamed(context, '/home');
                                         } else {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                                content: Text(result.error ??
-                                                    'Verification failed')),
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(result.error ?? 'Verification failed')),
                                           );
                                         }
                                       }
@@ -766,23 +705,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                         _passwordController.text,
                                       );
                                       if (user.user != null) {
-                                        await AppPreferences.setNotFirstTime();
-                                        Navigator.pushReplacementNamed(
-                                            context, '/home');
+                                        Navigator.pushReplacementNamed(context, '/home');
                                       }
                                     }
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 32,
-                                      vertical: 16,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                                     backgroundColor: Colors.black54,
                                   ),
                                   child: Text(_usePhone
-                                      ? (_verificationId == null
-                                          ? 'Send Code'
-                                          : 'Verify Code')
+                                      ? (_verificationId == null ? 'Send Code' : 'Verify Code')
                                       : 'Sign Up'),
                                 ),
                                 const SizedBox(height: 16),
@@ -795,18 +727,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                     });
                                   },
                                   child: Text(
-                                    _usePhone
-                                        ? 'Use Email Instead'
-                                        : 'Use Phone Number Instead',
-                                    style: const TextStyle(
-                                        color: Colors.blueAccent),
+                                    _usePhone ? 'Use Email Instead' : 'Use Phone Number Instead',
+                                    style: const TextStyle(color: Colors.blueAccent),
                                   ),
                                 ),
                                 const SizedBox(height: 16),
                                 TextButton(
-                                  onPressed: () {
-                                    Navigator.pushNamed(context, '/login');
-                                  },
+                                  onPressed: () => Navigator.pushNamed(context, '/login'),
                                   child: const Text(
                                     'Already have an account? Sign In',
                                     style: TextStyle(color: Colors.blueAccent),

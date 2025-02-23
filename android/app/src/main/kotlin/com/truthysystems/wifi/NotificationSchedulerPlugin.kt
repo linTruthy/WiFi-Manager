@@ -24,10 +24,10 @@ class NotificationSchedulerPlugin: FlutterPlugin, MethodCallHandler {
                 try {
                     val timeInMillis = call.argument<Long>("timeInMillis") 
                         ?: return result.error("INVALID_ARG", "Time in millis required", null)
-                    val customerId = call.argument<Int>("customerId") 
+                   val customerId = call.argument<String>("customerId") // Change to String
                         ?: return result.error("INVALID_ARG", "Customer ID required", null)
                     
-                    NotificationScheduler.scheduleExactNotification(context, timeInMillis)
+                    NotificationScheduler.scheduleExactNotification(context, timeInMillis, customerId)
                     result.success(null)
                 } catch (e: Exception) {
                     result.error("SCHEDULE_ERROR", e.message, null)

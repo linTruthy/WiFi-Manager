@@ -1,6 +1,4 @@
-
-
-import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'database/models/referral_stats.dart';
 
@@ -8,27 +6,13 @@ Duration getRewardDuration(ReferralStats referralStats) {
   return Duration(milliseconds: referralStats.rewardDurationMillis);
 }
 
-
-
 String generateShareableLink(String customerId, DateTime subscriptionEndDate) {
-  final encodedCustomerId = base64Url.encode(utf8.encode(customerId));
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) throw Exception('User not authenticated');
   final data = {
-    'cid': encodedCustomerId,
-    'exp': subscriptionEndDate.millisecondsSinceEpoch.toString(),
+    'uid': user.uid,
+    'cid': customerId,
   };
   final queryParams = Uri(queryParameters: data).query;
-  return "https://your-domain.com/customer-share?$queryParams";
+  return "https://truthy-wifi-manager.web.app/customer-share?$queryParams";
 }
-
-String? decodeCustomerId(String? encodedId) {
-  if (encodedId == null) return null;
-  try {
-    return utf8.decode(base64Url.decode(encodedId));
-  } catch (e) {
-    print('Error decoding customer ID: $e');
-    return null;
-  }
-}
-
-
-

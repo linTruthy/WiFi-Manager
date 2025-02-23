@@ -15,14 +15,18 @@ import java.util.Calendar
 
 class NotificationScheduler {
     companion object {
-        fun scheduleExactNotification(context: Context, timeInMillis: Long) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, NotificationReceiver::class.java).apply {
-                action = "com.truthysystems.wifi.SCHEDULE_NOTIFICATIONS"
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+        fun scheduleExactNotification(context: Context, timeInMillis: Long, customerId: String) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, NotificationReceiver::class.java).apply {
+            action = "com.truthysystems.wifi.SCHEDULE_NOTIFICATIONS"
+            putExtra("customerId", customerId) // Pass customerId to receiver
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            customerId.hashCode(), // Use customerId hash as unique request code
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // Android 12+ (API 31+)
                 // Check if we have SCHEDULE_EXACT_ALARM permission
@@ -66,13 +70,13 @@ class NotificationScheduler {
 }
 
 class NotificationReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
+   override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == "com.truthysystems.wifi.SCHEDULE_NOTIFICATIONS") {
-            // Trigger native notification scheduling logic here
+            val customerId = intent.getStringExtra("customerId")
+            android.util.Log.d("NotificationReceiver", "Received for customer: $customerId")
             scheduleNotifications(context)
         }
     }
-
     private fun scheduleNotifications(context: Context) {
         // This is a placeholder for native scheduling logic
         // You would typically query your database (e.g., Isar via Flutter) or use a service
@@ -81,6 +85,6 @@ class NotificationReceiver : BroadcastReceiver() {
         // Example: Schedule a test notification in 5 minutes
         val calendar = Calendar.getInstance()
         calendar.add(Calendar.MINUTE, 5)
-        NotificationScheduler.scheduleExactNotification(context, calendar.timeInMillis)
+        NotificationScheduler.scheduleExactNotification(context, calendar.timeInMillis,"")
     }
 }

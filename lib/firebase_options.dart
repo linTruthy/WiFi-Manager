@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -59,4 +56,15 @@ class DefaultFirebaseOptions {
     projectId: 'truthy-wifi-manager',
     storageBucket: 'truthy-wifi-manager.firebasestorage.app',
   );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyCQ03E4jO-aLg8-48I2ogzy6o9JLML70_k',
+    appId: '1:391437135862:web:1d704f3c439b1e698f61d7',
+    messagingSenderId: '391437135862',
+    projectId: 'truthy-wifi-manager',
+    authDomain: 'truthy-wifi-manager.firebaseapp.com',
+    storageBucket: 'truthy-wifi-manager.firebasestorage.app',
+    measurementId: 'G-XSRQ59CNK6',
+  );
+
 }

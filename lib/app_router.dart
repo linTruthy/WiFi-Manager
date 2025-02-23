@@ -16,28 +16,47 @@ import 'screens/payments_screen.dart';
 import 'screens/settings_screen.dart';
 
 class AppRouter {
-  static Route<dynamic>? onGenerateRoute(
-      RouteSettings settings, WidgetRef ref) {
-    return switch (settings.name) {
-      '/login' => MaterialPageRoute(builder: (_) => const LoginScreen()),
-      '/register' => MaterialPageRoute(builder: (_) => const RegisterScreen()),
-      '/downtime-input' =>
-        MaterialPageRoute(builder: (_) => const DowntimeInputScreen()),
-      final name when name?.startsWith('/customer/') ?? false =>
-        MaterialPageRoute(
-          builder: (context) =>
-              _buildCustomerDetailScreen(settings.name!.split('/').last, ref),
-        ),
-      final name when name?.startsWith('/edit-customer/') ?? false =>
-        MaterialPageRoute(
-          builder: (context) =>
-              _buildEditCustomerScreen(settings.name!.split('/').last, ref),
-        ),
-      _ => null,
-    };
+  static Route<dynamic>? onGenerateRoute(RouteSettings settings, WidgetRef ref) {
+    final uri = Uri.parse(settings.name ?? '/');
+    final path = uri.path;
+    switch (path) {
+      case '/login':
+        return MaterialPageRoute(builder: (_) => const LoginScreen());
+      case '/register':
+        return MaterialPageRoute(builder: (_) => const RegisterScreen());
+      case '/downtime-input':
+        return MaterialPageRoute(builder: (_) => const DowntimeInputScreen());
+      case '/customer-share':
+        return MaterialPageRoute(builder: (_) => const CustomerShareView());
+      default:
+        if (path.startsWith('/customer/')) {
+          final customerId = path.split('/').last;
+          final customer = settings.arguments as Customer?;
+          if (customer != null && customer.id == customerId) {
+            return MaterialPageRoute(
+              builder: (_) => CustomerDetailScreen(customer: customer),
+            );
+          }
+          return MaterialPageRoute(
+            builder: (_) => _buildCustomerDetailScreen(customerId, ref),
+          );
+        } else if (path.startsWith('/edit-customer/')) {
+          final customerId = path.split('/').last;
+          final customer = settings.arguments as Customer?;
+          if (customer != null && customer.id == customerId) {
+            return MaterialPageRoute(
+              builder: (_) => EditCustomerScreen(customer: customer),
+            );
+          }
+          return MaterialPageRoute(
+            builder: (_) => _buildEditCustomerScreen(customerId, ref),
+          );
+        }
+        return null; // Let routes table handle static routes
+    }
   }
 
-  static Widget _buildCustomerDetailScreen(String customerId, WidgetRef ref) {
+ static Widget _buildCustomerDetailScreen(String customerId, WidgetRef ref) {
     return FutureBuilder<Customer?>(
       future: _getCustomerById(customerId, ref),
       builder: (context, snapshot) {

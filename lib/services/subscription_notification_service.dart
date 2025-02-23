@@ -45,15 +45,15 @@ class SubscriptionNotificationService {
   }
 
   static Future<void> _scheduleOnAndroid(
-      tz.TZDateTime time, String customerId) async {
-    if (Platform.isAndroid) {
-      final timeInMillis = time.millisecondsSinceEpoch;
-      await _androidChannel.invokeMethod('scheduleExactNotification', {
-        'timeInMillis': timeInMillis,
-        'customerId': int.parse(customerId),
-      });
-    }
+    tz.TZDateTime time, String customerId) async {
+  if (Platform.isAndroid) {
+    final timeInMillis = time.millisecondsSinceEpoch;
+    await _androidChannel.invokeMethod('scheduleExactNotification', {
+      'timeInMillis': timeInMillis,
+      'customerId': customerId, // Keep as String
+    });
   }
+}
 
   static Future<void> initialize() async {
     await _requestPermissions();
@@ -122,48 +122,47 @@ class SubscriptionNotificationService {
     await _notifications.initialize(initializationSettings);
   }
 
-  static Future<void> scheduleExpirationNotifications(
-      List<Customer> customers) async {
-    final now = tz.TZDateTime.now(tz.local);
-    final notificationDetailsList = <Future<void>>[];
+ static Future<void> scheduleExpirationNotifications(
+    List<Customer> customers) async {
+  final now = tz.TZDateTime.now(tz.local);
+  final notificationDetailsList = <Future<void>>[];
+  final scheduledCustomers = <Customer>[]; // Track customers actually scheduled
+  final scheduledTimes = <tz.TZDateTime>[]; // Track corresponding times
 
-    for (final customer in customers) {
-      if (await _isNotificationScheduled(customer.id)) continue;
-      final notificationTime = _calculateNotificationTime(customer);
-      if (notificationTime.isBefore(now)) {
-        await _scheduleImmediateNotification(customer);
-        await _scheduleOnAndroid(notificationTime, customer.id);
-        continue;
-      }
-
-      final importance = _getImportance(customer);
-      final notificationDetails = _createNotificationDetails(importance);
-      notificationDetailsList.add(_notifications.zonedSchedule(
-        customer.id.hashCode,
-        'Subscription Expiring',
-        _generateMessage(customer),
-        notificationTime,
-        notificationDetails,
-        androidScheduleMode: await _getScheduleMode(),
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: customer.id.toString(),
-      ));
+  for (final customer in customers) {
+    if (await _isNotificationScheduled(customer.id)) continue;
+    final notificationTime = _calculateNotificationTime(customer);
+    if (notificationTime.isBefore(now)) {
+      await _scheduleImmediateNotification(customer);
       await _scheduleOnAndroid(notificationTime, customer.id);
+      continue;
     }
-
-    try {
-      await Future.wait(notificationDetailsList);
-      await _saveScheduledNotifications(
-          customers,
-          notificationDetailsList
-              .map((e) => _calculateNotificationTime(customers.first))
-              .toList());
-    } catch (e) {
-      _logger.log(Level.error, 'Failed to schedule multiple notifications: $e');
-      await _retryScheduleNotifications(customers, 0);
-    }
+    final importance = _getImportance(customer);
+    final notificationDetails = _createNotificationDetails(importance);
+    notificationDetailsList.add(_notifications.zonedSchedule(
+      customer.id.hashCode,
+      'Subscription Expiring',
+      _generateMessage(customer),
+      notificationTime,
+      notificationDetails,
+      androidScheduleMode: await _getScheduleMode(),
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: customer.id.toString(),
+    ));
+  //  await _scheduleOnAndroid(notificationTime, customer.id);
+    scheduledCustomers.add(customer); // Add to tracked list
+    scheduledTimes.add(notificationTime); // Add corresponding time
   }
+
+  try {
+    await Future.wait(notificationDetailsList);
+    await _saveScheduledNotifications(scheduledCustomers, scheduledTimes);
+  } catch (e) {
+    _logger.log(Level.error, 'Failed to schedule multiple notifications: $e');
+    await _retryScheduleNotifications(customers, 0);
+  }
+}
 
   static Future<AndroidScheduleMode> _getScheduleMode() async {
     if (Platform.isAndroid) {

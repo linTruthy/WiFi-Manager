@@ -8,25 +8,18 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import androidx.annotation.NonNull
 import org.json.JSONObject
-import io.flutter.plugins.GeneratedPluginRegistrant
+import io.flutter.embedding.engine.plugins.FlutterPlugin // Required for plugin interface
 
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.truthysystems.wifi/subscription_widget"
     private lateinit var subscriptionChannel: MethodChannel
     private lateinit var utilityChannel: MethodChannel
+    private lateinit var notificationSchedulerChannel: MethodChannel
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-// Register the NotificationSchedulerPlugin
-        NotificationSchedulerPlugin().onAttachedToEngine(
-            FlutterPlugin.FlutterPluginBinding(
-                applicationContext,
-                flutterEngine.dartExecutor.binaryMessenger
-            )
-        )
 
-        // Set up utility channel
+        // Register utility channel
         utilityChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "truthy.systems/wifi")
         utilityChannel.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -45,7 +38,7 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
 
-        // Set up subscription widget channel
+        // Register subscription widget channel
         subscriptionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         subscriptionChannel.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -62,7 +55,6 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         val activeCustomersCount = arguments["activeCustomersCount"] as Int
                         val newRevenue = (arguments["totalRevenue"] as? Double) ?: 0.0
-                        
                         SubscriptionWidgetProvider.updateData(
                             context = this,
                             newExpiringCustomers = expiringCustomers,
@@ -79,6 +71,14 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
         }
+
+        // Register NotificationSchedulerPlugin directly with FlutterEngine
+        val notificationSchedulerPlugin = NotificationSchedulerPlugin()
+        flutterEngine.plugins.add(notificationSchedulerPlugin) // Add plugin to engine
+
+        // Optionally, set up the MethodChannel explicitly if needed (not strictly required)
+        notificationSchedulerChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.truthysystems.wifi/notification_scheduler")
+        notificationSchedulerChannel.setMethodCallHandler(notificationSchedulerPlugin)
     }
 
     private fun resourceToUriString(context: Context, resId: Int): String? {
@@ -90,8 +90,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Clean up method channels
         subscriptionChannel.setMethodCallHandler(null)
         utilityChannel.setMethodCallHandler(null)
+        notificationSchedulerChannel.setMethodCallHandler(null)
     }
 }

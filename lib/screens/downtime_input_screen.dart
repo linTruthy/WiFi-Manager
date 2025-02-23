@@ -42,10 +42,12 @@ class _DowntimeInputScreenState extends ConsumerState<DowntimeInputScreen> {
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
-                      if (value == null || value.isEmpty)
+                      if (value == null || value.isEmpty) {
                         return 'Please enter a duration';
-                      if (int.tryParse(value) == null)
+                      }
+                      if (int.tryParse(value) == null) {
                         return 'Please enter a valid number';
+                      }
                       return null;
                     },
                     onSaved: (value) {
@@ -116,8 +118,9 @@ class _DowntimeInputScreenState extends ConsumerState<DowntimeInputScreen> {
                                             .doc(customerId)
                                             .get(),
                                         builder: (context, customerSnapshot) {
-                                          if (!customerSnapshot.hasData)
+                                          if (!customerSnapshot.hasData) {
                                             return const SizedBox.shrink();
+                                          }
                                           final customerData =
                                               customerSnapshot.data!.data()
                                                   as Map<String, dynamic>?;

@@ -8,7 +8,7 @@ class AdManager {
   AdManager._internal();
 
   // Ad instances
-  BannerAd? _bannerAd;
+ final List<BannerAd> _bannerAds = [];
   InterstitialAd? _interstitialAd;
   RewardedAd? _rewardedAd;
 
@@ -45,10 +45,8 @@ class AdManager {
   }) async {
     if (_isBannerLoading) return;
     _isBannerLoading = true;
-
     try {
-      _bannerAd?.dispose();
-      _bannerAd = BannerAd(
+      final bannerAd = BannerAd(
         adUnitId: adUnitId ?? "ca-app-pub-8267064683737776/7537627551",
         size: size,
         request: _adRequest,
@@ -56,22 +54,16 @@ class AdManager {
           onAdLoaded: (Ad ad) {
             _isBannerLoading = false;
             _bannerImpressions++;
-            debugPrint(
-              'Banner Ad loaded successfully. Total impressions: $_bannerImpressions',
-            );
+            _bannerAds.add(ad as BannerAd); // Add to pool
+            debugPrint('Banner Ad loaded successfully. Total impressions: $_bannerImpressions');
           },
           onAdFailedToLoad: (Ad ad, LoadAdError error) async {
             _isBannerLoading = false;
             ad.dispose();
             debugPrint('Banner Ad failed to load: $error');
-
             if (retryCount < maxRetries) {
               await Future.delayed(retryDelay);
-              initializeBannerAd(
-                adUnitId: adUnitId,
-                size: size,
-                retryCount: retryCount + 1,
-              );
+              initializeBannerAd(adUnitId: adUnitId, size: size, retryCount: retryCount + 1);
             }
           },
           onAdImpression: (Ad ad) {
@@ -80,8 +72,7 @@ class AdManager {
           },
         ),
       );
-
-      await _bannerAd!.load();
+      await bannerAd.load();
     } catch (e) {
       _isBannerLoading = false;
       debugPrint('Error initializing banner ad: $e');
@@ -89,30 +80,33 @@ class AdManager {
   }
 
   // Enhanced Banner Widget with loading and error states
-  Widget getBannerAdWidget({double? maxWidth}) {
-    return _bannerAd == null
-        ? const SizedBox.shrink()
-        : Container(
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+  Widget getBannerAdWidget({double? maxWidth, AdSize size = AdSize.banner}) {
+    if (_bannerAds.isEmpty) {
+      initializeBannerAd(size: size); // Preload if none available
+      return const SizedBox.shrink();
+    }
+    final bannerAd = _bannerAds.removeAt(0); // Take an available ad
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
-          constraints: BoxConstraints(
-            maxWidth: maxWidth ?? double.infinity,
-            maxHeight: _bannerAd!.size.height.toDouble(),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: AdWidget(ad: _bannerAd!),
-          ),
-        );
+        ],
+      ),
+      constraints: BoxConstraints(
+        maxWidth: maxWidth ?? double.infinity,
+        maxHeight: bannerAd.size.height.toDouble(),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AdWidget(ad: bannerAd),
+      ),
+    );
   }
 
   // Interstitial Ad Management
@@ -284,7 +278,9 @@ class AdManager {
 
   // Cleanup
   void dispose() {
-    _bannerAd?.dispose();
+   for (var ad in _bannerAds) {
+      ad.dispose();
+    }
     _interstitialAd?.dispose();
     _rewardedAd?.dispose();
   }
