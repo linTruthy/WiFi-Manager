@@ -22,7 +22,7 @@
         android:hardwareAccelerated="false"
         android:enableOnBackInvokedCallback="true">
         
-        <!-- Move the AdMob App ID here, directly under <application> -->
+       
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-8267064683737776~4117257296"/>
@@ -42,13 +42,7 @@
             <meta-data
                 android:name="io.flutter.embedding.android.EnableVulkan"
                 android:value="true" />
-            <service
-    android:name="com.truthysystems.wifi.NotificationSchedulerPlugin"
-    android:exported="false">
-    <intent-filter>
-        <action android:name="flutter.platform.PlatformService" />
-    </intent-filter>
-</service>
+         
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
@@ -69,10 +63,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Other application-level configurations -->
+       
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+           <!-- <service
+    android:name=".NotificationSchedulerPlugin"
+    android:exported="false">
+    <intent-filter>
+        <action android:name="flutter.platform.PlatformService" />
+    </intent-filter>
+</service> -->
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"/> 
         <receiver 

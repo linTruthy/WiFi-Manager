@@ -2,9 +2,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
-import 'package:truthy_wifi_manager/providers/customer_provider.dart' show customerProvider;
-
+import 'package:truthy_wifi_manager/providers/customer_provider.dart'
+    show customerProvider;
 
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
@@ -12,7 +11,6 @@ import '../database/models/referral_stats.dart';
 import '../providers/database_provider.dart';
 import '../providers/notification_schedule_provider.dart';
 import '../providers/subscription_provider.dart';
-import '../providers/syncing_provider.dart';
 
 class AddCustomerScreen extends ConsumerStatefulWidget {
   const AddCustomerScreen({super.key});
@@ -79,13 +77,12 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 labelText: 'Plan',
                 border: OutlineInputBorder(),
               ),
-              items:
-                  PlanType.values.map((plan) {
-                    return DropdownMenuItem(
-                      value: plan,
-                      child: Text(plan.name),
-                    );
-                  }).toList(),
+              items: PlanType.values.map((plan) {
+                return DropdownMenuItem(
+                  value: plan,
+                  child: Text(plan.name),
+                );
+              }).toList(),
               onChanged: (PlanType? value) {
                 if (value != null) {
                   setState(() {
@@ -108,20 +105,17 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   void _saveCustomer() async {
     if (_formKey.currentState?.validate() ?? false) {
       final customer = Customer(
-        wifiName: '',
         name: _nameController.text,
         contact: _contactController.text,
         isActive: true,
+        wifiName: Customer.generateWifiName(_nameController.text),
         currentPassword: _generatePassword(),
         subscriptionStart: DateTime.now(),
         subscriptionEnd: _calculateEndDate(),
         planType: _selectedPlan,
-        referredBy:
-            _referralCodeController.text.isNotEmpty
-                ? await _getCustomerIdByReferralCode(
-                  _referralCodeController.text,
-                )
-                : null,
+        referredBy: _referralCodeController.text.isNotEmpty
+            ? await _getCustomerIdByReferralCode(_referralCodeController.text)
+            : null,
       );
 
       try {
@@ -137,7 +131,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             await _applyReferralReward(customer.referredBy!, customer);
           }
         }
-        ref.invalidate(syncingProvider);
+
         ref.invalidate(activeCustomersProvider);
         ref.invalidate(databaseProvider);
         ref.invalidate(customerProvider);
@@ -162,54 +156,72 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   }
 
   Future<String?> _getCustomerIdByReferralCode(String referralCode) async {
-    final isar = await ref.read(databaseProvider).db;
-    final referrer =
-        await isar.customers
-            .filter()
-            .referralCodeEqualTo(referralCode)
-            .findFirst();
-
-    if (referrer != null) {
-      return referrer.id.toString(); // Return the referrer's ID
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid referral code. Please check and try again.'),
-          ),
-        );
-      }
-      return null;
-    }
+    final snapshot = await ref
+        .read(databaseProvider)
+        .firestore
+        .collection(
+            ref.read(databaseProvider).getUserCollectionPath('customers'))
+        .where('referralCode', isEqualTo: referralCode)
+        .limit(1)
+        .get();
+    return snapshot.docs.isEmpty ? null : snapshot.docs.first.id;
   }
 
   Future<void> _applyReferralReward(
-    String referrerId,
-    Customer newCustomer,
-  ) async {
-    final isar = await ref.read(databaseProvider).db;
-    final referrer = await isar.customers.get(int.parse(referrerId));
+      String referrerId, Customer newCustomer) async {
+    final database = ref.read(databaseProvider);
+    final referrerDoc = await database.firestore
+        .collection(database.getUserCollectionPath('customers'))
+        .doc(referrerId)
+        .get();
 
-    if (referrer != null && referrer.isActive) {
-      final rewardDuration = _calculateReferralReward(
-        referrer.planType,
-        newCustomer.planType,
+    if (!referrerDoc.exists) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Referrer not found.')),
+        );
+      }
+      return;
+    }
+
+    final referrer = Customer.fromJson(referrerDoc.id, referrerDoc.data()!);
+    if (!referrer.isActive) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Referrer is inactive.')),
+        );
+      }
+      return;
+    }
+
+    final rewardDuration =
+        _calculateReferralReward(referrer.planType, newCustomer.planType);
+    referrer.subscriptionEnd = referrer.subscriptionEnd.add(rewardDuration);
+    referrer.referralRewardApplied = DateTime.now();
+
+    final referralStats = ReferralStats.fromDuration(
+      referrerId: referrerId,
+      referredCustomerId: newCustomer.id,
+      referralDate: DateTime.now(),
+      rewardDuration: rewardDuration,
+    );
+
+    try {
+      // Use a batch to ensure atomic updates
+      final batch = database.firestore.batch();
+      batch.set(
+        database.firestore
+            .collection(database.getUserCollectionPath('customers'))
+            .doc(referrer.id),
+        referrer.toJson(),
       );
-      referrer.subscriptionEnd = referrer.subscriptionEnd.add(rewardDuration);
-      referrer.referralRewardApplied = DateTime.now();
-
-      // Save referral stats
-      final referralStats = ReferralStats.fromDuration(
-        referrerId: referrerId,
-        referredCustomerId: newCustomer.id.toString(),
-        referralDate: DateTime.now(),
-        rewardDuration: rewardDuration,
+      batch.set(
+        database.firestore
+            .collection(database.getUserCollectionPath('referral_stats'))
+            .doc(referralStats.id),
+        referralStats.toJson(),
       );
-
-      await isar.writeTxn(() async {
-        await isar.customers.put(referrer);
-        await isar.referralStats.put(referralStats); // Save referral stats
-      });
+      await batch.commit();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -220,10 +232,10 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           ),
         );
       }
-    } else {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Referrer not found or inactive.')),
+          SnackBar(content: Text('Failed to apply referral reward: $e')),
         );
       }
     }

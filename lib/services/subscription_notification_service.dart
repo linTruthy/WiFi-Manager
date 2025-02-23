@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:isar/isar.dart';
 import 'package:logger/logger.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
@@ -35,13 +36,21 @@ class SubscriptionNotificationService {
   };
   static const MethodChannel _androidChannel =
       MethodChannel('com.truthysystems.wifi/notification_scheduler');
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  static String _getUserCollectionPath(String collection) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+    return 'users/${user.uid}/$collection';
+  }
+
   static Future<void> _scheduleOnAndroid(
-      tz.TZDateTime time, int customerId) async {
+      tz.TZDateTime time, String customerId) async {
     if (Platform.isAndroid) {
       final timeInMillis = time.millisecondsSinceEpoch;
       await _androidChannel.invokeMethod('scheduleExactNotification', {
         'timeInMillis': timeInMillis,
-        'customerId': customerId,
+        'customerId': int.parse(customerId),
       });
     }
   }
@@ -69,9 +78,6 @@ class SubscriptionNotificationService {
       if (!status.isGranted) {
         await Permission.notification.request();
       }
-
-      final platform = _notifications.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
       final alarmStatus = await Permission.scheduleExactAlarm.status;
       if (!alarmStatus.isGranted) {
         final result = await Permission.scheduleExactAlarm.request();
@@ -80,6 +86,22 @@ class SubscriptionNotificationService {
               'Exact alarms denied, falling back to inexact alarms.');
         }
       }
+    }
+  }
+
+  static Future<void> scheduleAllNotifications() async {
+    try {
+      final snapshot = await _firestore
+          .collection(_getUserCollectionPath('customers'))
+          .where('isActive', isEqualTo: true)
+          .get();
+      final customers = snapshot.docs
+          .map((doc) => Customer.fromJson(doc.id, doc.data()))
+          .toList();
+      await scheduleExpirationNotifications(customers);
+      print('All notifications scheduled');
+    } on PlatformException catch (e) {
+      print("Failed to schedule all notifications: ${e.message}");
     }
   }
 
@@ -199,7 +221,7 @@ class SubscriptionNotificationService {
         'Subscription Expiring Soon',
         _generateMessage(customer),
         notificationDetails,
-        payload: customer.id.toString(),
+        payload: customer.id,
       );
     } catch (e) {
       _logger.log(Level.error,
@@ -217,7 +239,7 @@ class SubscriptionNotificationService {
       final customer = customers[i];
       final time = times[i];
       final notificationDetails = {
-        'customerId': customer.id.toString(),
+        'customerId': customer.id,
         'customerName': customer.name,
         'contact': customer.contact,
         'wifiName': customer.wifiName,
@@ -328,7 +350,7 @@ class SubscriptionNotificationService {
     final context = navigatorKey.currentContext;
     if (context == null) return;
 
-    final customerId = int.parse(payload);
+    final customerId = payload;
     final customer = await _getCustomerById(customerId);
     if (customer == null) return;
 
@@ -374,11 +396,10 @@ class SubscriptionNotificationService {
         prefs.getString('detailed_scheduled_notifications') ?? '{}';
     final detailedNotifications =
         json.decode(detailedNotificationsString) as Map<String, dynamic>;
-    final notification = detailedNotifications[customer.id.toString()];
+    final notification = detailedNotifications[customer.id];
     if (notification != null) {
       final snoozeCount = (notification['snoozeCount'] as int) + 1;
       if (snoozeCount <= 3) {
-        // Limit snooze to 3 times
         final newTime = tz.TZDateTime.now(tz.local)
             .add(Duration(minutes: 30 * snoozeCount));
         notification['notificationTime'] = newTime.toIso8601String();
@@ -390,7 +411,6 @@ class SubscriptionNotificationService {
       }
     }
   }
-
   // static Widget _buildCustomerDetailScreen(String customerId) {
   //   return FutureBuilder<Customer?>(
   //     future: _getCustomerById(int.parse(customerId)),
@@ -403,9 +423,12 @@ class SubscriptionNotificationService {
   //   );
   // }
 
-  static Future<Customer?> _getCustomerById(int customerId) async {
-    final isar = Isar.getInstance('wifi_manager');
-    return await isar?.customers.get(customerId);
+  static Future<Customer?> _getCustomerById(String customerId) async {
+    final doc = await _firestore
+        .collection(_getUserCollectionPath('customers'))
+        .doc(customerId)
+        .get();
+    return doc.exists ? Customer.fromJson(doc.id, doc.data()!) : null;
   }
 
   static Future<void> scheduleExpirationNotification(Customer customer,
@@ -611,14 +634,14 @@ class SubscriptionNotificationService {
   //   return PlanType.monthly; // Default
   // }
 
-  static Future<bool> _isNotificationScheduled(int customerId) async {
+  static Future<bool> _isNotificationScheduled(String customerId) async {
     final prefs = await SharedPreferences.getInstance();
     final scheduledNotifications = prefs.getString(_scheduledNotificationsKey);
     if (scheduledNotifications == null) return false;
 
     final notifications =
         json.decode(scheduledNotifications) as Map<String, dynamic>;
-    final scheduledTime = notifications[customerId.toString()];
+    final scheduledTime = notifications[customerId];
 
     if (scheduledTime == null) return false;
 
@@ -627,7 +650,7 @@ class SubscriptionNotificationService {
   }
 
   static Future<void> _markNotificationScheduled(
-    int customerId,
+    String customerId,
     tz.TZDateTime notificationTime,
   ) async {
     final prefs = await SharedPreferences.getInstance();
@@ -636,7 +659,7 @@ class SubscriptionNotificationService {
         ? json.decode(scheduledNotifications) as Map<String, dynamic>
         : <String, dynamic>{};
 
-    notifications[customerId.toString()] = notificationTime.toString();
+    notifications[customerId] = notificationTime.toString();
     await prefs.setString(
       _scheduledNotificationsKey,
       json.encode(notifications),

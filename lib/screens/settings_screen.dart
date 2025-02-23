@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:truthy_wifi_manager/database/repository/database_repository.dart';
+import '../database/models/customer.dart';
 import '../providers/database_provider.dart';
 import '../services/subscription_notification_service.dart';
 
@@ -102,19 +102,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
-    await SubscriptionNotificationService.saveSettings({
-      'daysBeforeDaily': _daysBeforeDaily,
-      'daysBeforeWeekly': _daysBeforeWeekly,
-      'daysBeforeMonthly': _daysBeforeMonthly,
-      'priorityUrgent': _priorityUrgent,
-      'enableSnooze': _enableSnooze,
-    });
-    // Re-schedule notifications with new settings
-    final repository = ref.read(databaseProvider);
-    await repository.scheduleNotifications();
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Settings saved')));
+    try {
+      await SubscriptionNotificationService.saveSettings({
+        'daysBeforeDaily': _daysBeforeDaily,
+        'daysBeforeWeekly': _daysBeforeWeekly,
+        'daysBeforeMonthly': _daysBeforeMonthly,
+        'priorityUrgent': _priorityUrgent,
+        'enableSnooze': _enableSnooze,
+      });
+
+      final database = ref.read(databaseProvider);
+      final snapshot = await database.firestore
+          .collection(database.getUserCollectionPath('customers'))
+          .where('isActive', isEqualTo: true)
+          .get();
+      final customers = snapshot.docs
+          .map((doc) => Customer.fromJson(doc.id, doc.data()))
+          .toList();
+
+      await SubscriptionNotificationService.scheduleExpirationNotifications(
+          customers);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Settings saved')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to save settings: $e')));
+      }
     }
   }
 }

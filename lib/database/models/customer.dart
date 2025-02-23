@@ -1,39 +1,110 @@
+// import 'dart:math';
+
+// import 'package:isar/isar.dart';
+// import 'plan.dart';
+
+// part 'customer.g.dart';
+
+// @Collection(inheritance: false)
+// class Customer {
+//   Id id = Isar.autoIncrement;
+
+//   @Index(type: IndexType.value)
+//   String name;
+
+//   String contact;
+//    @Index(type: IndexType.value)
+//   bool isActive;
+
+//   @Index(type: IndexType.value)
+//   String wifiName;
+//   String currentPassword;
+
+//   DateTime subscriptionStart;
+//   DateTime subscriptionEnd;
+
+//   @Index(type: IndexType.value)
+//   DateTime lastModified;
+
+//   @Enumerated(EnumType.name)
+//   PlanType planType;
+
+//   // New fields for referral program
+//   String? referredBy; // ID of the customer who referred this customer
+//   DateTime?
+//   referralRewardApplied; // Timestamp when the referral reward was applied
+//   @Index(type: IndexType.value) // Add index for efficient lookup
+//   String referralCode; // Unique referral code for this customer
+
+//   Customer({
+//     required this.name,
+//     required this.contact,
+//     required this.isActive,
+//     required this.wifiName,
+//     required this.currentPassword,
+//     required this.subscriptionStart,
+//     required this.subscriptionEnd,
+//     required this.planType,
+//     this.referredBy,
+//     this.referralRewardApplied,
+//   }) : referralCode =
+//            _generateReferralCode(), // Generate referral code on creation
+//        lastModified = DateTime.now();
+
+//   // Convert Customer instance to JSON
+//   Map<String, dynamic> toJson() {
+//     return {
+//       'id': id,
+//       'name': name,
+//       'contact': contact,
+//       'isActive': isActive,
+//       'wifiName': wifiName,
+//       'currentPassword': currentPassword,
+//       'subscriptionStart': subscriptionStart.toIso8601String(),
+//       'subscriptionEnd': subscriptionEnd.toIso8601String(),
+//       'lastModified': lastModified.toIso8601String(),
+//       'planType': planType.name,
+//     };
+//   }
+
+//   // Create Customer instance from JSON
+//   static Customer fromJson(Map<String, dynamic> json) {
+//     return Customer(
+//         name: json['name'] as String,
+//         contact: json['contact'] as String,
+//         isActive: json['isActive'] as bool,
+//         wifiName: json['wifiName'] as String,
+//         currentPassword: json['currentPassword'] as String,
+//         subscriptionStart: DateTime.parse(json['subscriptionStart'] as String),
+//         subscriptionEnd: DateTime.parse(json['subscriptionEnd'] as String),
+//         planType: PlanType.values.firstWhere(
+//           (e) => e.name == json['planType'],
+//           orElse: () => PlanType.daily,
+//         ),
+//       )
+//       ..id = json['id'] as int
+//       ..lastModified = DateTime.parse(json['lastModified'] as String);
+//   }
 import 'dart:math';
 
-import 'package:isar/isar.dart';
 import 'plan.dart';
 
-part 'customer.g.dart';
+//enum PlanType { daily, weekly, monthly }
 
-@Collection(inheritance: false)
 class Customer {
-  Id id = Isar.autoIncrement;
-
-  @Index(type: IndexType.value)
+  String id; // Changed from Id to String
   String name;
-
   String contact;
   bool isActive;
-
-  @Index(type: IndexType.value)
   String wifiName;
   String currentPassword;
-
   DateTime subscriptionStart;
   DateTime subscriptionEnd;
-
-  @Index(type: IndexType.value)
   DateTime lastModified;
-
-  @Enumerated(EnumType.name)
   PlanType planType;
-
-  // New fields for referral program
-  String? referredBy; // ID of the customer who referred this customer
-  DateTime?
-  referralRewardApplied; // Timestamp when the referral reward was applied
-  @Index(type: IndexType.value) // Add index for efficient lookup
-  String referralCode; // Unique referral code for this customer
+  String? referredBy;
+  DateTime? referralRewardApplied;
+  String referralCode;
 
   Customer({
     required this.name,
@@ -46,14 +117,12 @@ class Customer {
     required this.planType,
     this.referredBy,
     this.referralRewardApplied,
-  }) : referralCode =
-           _generateReferralCode(), // Generate referral code on creation
-       lastModified = DateTime.now();
+  })  : id = '', // Initialize as empty; will be set when saving
+        referralCode = _generateReferralCode(),
+        lastModified = DateTime.now();
 
-  // Convert Customer instance to JSON
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'name': name,
       'contact': contact,
       'isActive': isActive,
@@ -63,25 +132,31 @@ class Customer {
       'subscriptionEnd': subscriptionEnd.toIso8601String(),
       'lastModified': lastModified.toIso8601String(),
       'planType': planType.name,
+      'referredBy': referredBy,
+      'referralRewardApplied': referralRewardApplied?.toIso8601String(),
+      'referralCode': referralCode,
     };
   }
 
-  // Create Customer instance from JSON
-  static Customer fromJson(Map<String, dynamic> json) {
+  static Customer fromJson(String id, Map<String, dynamic> json) {
     return Customer(
-        name: json['name'] as String,
-        contact: json['contact'] as String,
-        isActive: json['isActive'] as bool,
-        wifiName: json['wifiName'] as String,
-        currentPassword: json['currentPassword'] as String,
-        subscriptionStart: DateTime.parse(json['subscriptionStart'] as String),
-        subscriptionEnd: DateTime.parse(json['subscriptionEnd'] as String),
-        planType: PlanType.values.firstWhere(
-          (e) => e.name == json['planType'],
-          orElse: () => PlanType.daily,
-        ),
-      )
-      ..id = json['id'] as int
+      name: json['name'] as String,
+      contact: json['contact'] as String,
+      isActive: json['isActive'] as bool,
+      wifiName: json['wifiName'] as String,
+      currentPassword: json['currentPassword'] as String,
+      subscriptionStart: DateTime.parse(json['subscriptionStart'] as String),
+      subscriptionEnd: DateTime.parse(json['subscriptionEnd'] as String),
+      planType: PlanType.values.firstWhere(
+        (e) => e.name == json['planType'],
+        orElse: () => PlanType.daily,
+      ),
+      referredBy: json['referredBy'] as String?,
+      referralRewardApplied: json['referralRewardApplied'] != null
+          ? DateTime.parse(json['referralRewardApplied'] as String)
+          : null,
+    )
+      ..id = id
       ..lastModified = DateTime.parse(json['lastModified'] as String);
   }
 
@@ -97,15 +172,15 @@ class Customer {
     PlanType? planType,
   }) {
     return Customer(
-        name: name ?? this.name,
-        contact: contact ?? this.contact,
-        isActive: isActive ?? this.isActive,
-        wifiName: wifiName ?? this.wifiName,
-        currentPassword: currentPassword ?? this.currentPassword,
-        subscriptionStart: subscriptionStart ?? this.subscriptionStart,
-        subscriptionEnd: subscriptionEnd ?? this.subscriptionEnd,
-        planType: planType ?? this.planType,
-      )
+      name: name ?? this.name,
+      contact: contact ?? this.contact,
+      isActive: isActive ?? this.isActive,
+      wifiName: wifiName ?? this.wifiName,
+      currentPassword: currentPassword ?? this.currentPassword,
+      subscriptionStart: subscriptionStart ?? this.subscriptionStart,
+      subscriptionEnd: subscriptionEnd ?? this.subscriptionEnd,
+      planType: planType ?? this.planType,
+    )
       ..id = id
       ..lastModified = DateTime.now();
   }
@@ -191,8 +266,7 @@ class Customer {
 
   /// Generates a random numeric suffix for short WiFi names
   static String _generateRandomSuffix() {
-    final random =
-        DateTime.now().millisecondsSinceEpoch %
+    final random = DateTime.now().millisecondsSinceEpoch %
             (_maxRandomSuffix - _minRandomSuffix) +
         _minRandomSuffix;
     return random.toString();

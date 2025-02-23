@@ -1,0 +1,1 @@
+/home/user/WiFi-Manager/build/app/intermediates/cxx/RelWithDebInfo/4z6711u5/obj/x86_64

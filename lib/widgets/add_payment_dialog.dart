@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:isar/isar.dart';
 import '../database/models/payment.dart';
 import '../database/models/plan.dart';
 import '../database/models/customer.dart';
-import '../database/models/sync_status.dart';
 import '../providers/customer_provider.dart';
 import '../providers/database_provider.dart';
 import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
-import '../providers/syncing_provider.dart';
 import '../services/subscription_notification_service.dart';
 
 class AddPaymentDialog extends ConsumerStatefulWidget {
@@ -33,7 +30,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
   void initState() {
     super.initState();
     if (widget.customer != null) {
-      _selectedCustomerId = widget.customer!.id.toString();
+      _selectedCustomerId = widget.customer!.id;
       _selectedPlan = widget.customer!.planType;
       _updateAmount(); // Set default amount based on plan
     }
@@ -68,7 +65,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                     ),
                     items: customers.map((customer) {
                       return DropdownMenuItem(
-                        value: customer.id.toString(),
+                        value: customer.id,
                         child: Text(customer.name),
                       );
                     }).toList(),
@@ -99,9 +96,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        DateFormat('yyyy-MM-dd hh:mm a').format(_startDate),
-                      ),
+                      Text(DateFormat('yyyy-MM-dd hh:mm a').format(_startDate)),
                       const Icon(Icons.calendar_today),
                     ],
                   ),
@@ -115,15 +110,14 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                   border: OutlineInputBorder(),
                 ),
                 items: PlanType.values.map((plan) {
-                  return DropdownMenuItem(
-                    value: plan,
-                    child: Text(plan.name),
-                  );
+                  return DropdownMenuItem(value: plan, child: Text(plan.name));
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _selectedPlan = value);
-                    _updateAmount();
+                    setState(() {
+                      _selectedPlan = value;
+                      _updateAmount();
+                    });
                   }
                 },
               ),
@@ -153,9 +147,8 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         ElevatedButton(onPressed: _savePayment, child: const Text('Save')),
       ],
     );
@@ -169,7 +162,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
       lastDate: DateTime.now().add(const Duration(days: 14)),
     );
 
-    if (pickedDate != null) {
+    if (pickedDate != null && mounted) {
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(_startDate),
@@ -181,7 +174,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
         },
       );
 
-      if (pickedTime != null) {
+      if (pickedTime != null && mounted) {
         setState(() {
           _startDate = DateTime(
             pickedDate.year,
@@ -224,107 +217,103 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
     if (_formKey.currentState?.validate() ?? false) {
       try {
         final database = ref.read(databaseProvider);
-        final isar = await database.db;
-        await isar.writeTxn(() async {
-          final customer =
-              await isar.customers.get(int.parse(_selectedCustomerId!));
-          if (customer == null) throw Exception('Customer not found');
 
-          // Create payment record
-          final payment = Payment(
-            paymentDate: DateTime.now(),
-            amount: double.parse(_amountController.text),
-            customerId: _selectedCustomerId!,
-            planType: _selectedPlan,
-            isConfirmed: true,
-          );
-          await isar.payments.put(payment);
-          await isar.syncStatus.put(
-            SyncStatus(
-              entityId: payment.id,
-              entityType: 'payment',
-              operation: 'save',
-              timestamp: DateTime.now(),
-            ),
-          );
-          await database.pushPayment(payment);
+        // Fetch customer from Firestore
+        final customerDoc = await database.firestore
+            .collection(database.getUserCollectionPath('customers'))
+            .doc(_selectedCustomerId)
+            .get();
+        if (!customerDoc.exists) throw Exception('Customer not found');
+        final customer = Customer.fromJson(customerDoc.id, customerDoc.data()!);
 
-          // Update customer subscription and activate if inactive
-          customer.subscriptionStart = _startDate;
-          customer.subscriptionEnd =
-              _calculateEndDate(_startDate, _selectedPlan);
-          customer.planType = _selectedPlan;
-          if (!customer.isActive) {
-            customer.isActive = true; // Activate the customer
-          }
+        // Create payment record
+        final payment = Payment(
+          paymentDate: DateTime.now(),
+          amount: double.parse(_amountController.text),
+          customerId: _selectedCustomerId!,
+          planType: _selectedPlan,
+          isConfirmed: true,
+        );
 
-          // Generate WiFi credentials if first payment or reactivating
-          final previousPayments = await isar.payments
-              .filter()
-              .customerIdEqualTo(_selectedCustomerId!)
-              .findAll();
-          if (previousPayments.length <= 1 || !customer.isActive) {
-            customer.wifiName = Customer.generateWifiName(customer.name);
-            customer.currentPassword = Customer.generate();
-          }
+        // Update customer subscription and activate if inactive
+        customer.subscriptionStart = _startDate;
+        customer.subscriptionEnd = _calculateEndDate(_startDate, _selectedPlan);
+        customer.planType = _selectedPlan;
+        if (!customer.isActive) {
+          customer.isActive = true; // Activate the customer
+        }
 
-          await isar.customers.put(customer);
-          await isar.syncStatus.put(
-            SyncStatus(
-              entityId: customer.id,
-              entityType: 'customer',
-              operation: 'save',
-              timestamp: DateTime.now(),
-            ),
-          );
-          await database.pushCustomer(customer);
-        });
+        // Generate WiFi credentials if first payment or reactivating
+        final previousPaymentsSnapshot = await database.firestore
+            .collection(database.getUserCollectionPath('payments'))
+            .where('customerId', isEqualTo: _selectedCustomerId)
+            .get();
+        final previousPayments = previousPaymentsSnapshot.docs
+            .map((doc) => Payment.fromJson(doc.id, doc.data()))
+            .toList();
+        if (previousPayments.length <= 1 || !customer.isActive) {
+          customer.wifiName = Customer.generateWifiName(customer.name);
+          customer.currentPassword = Customer.generate();
+        }
 
+        // Save to Firestore using a batch for atomicity
+        final batch = database.firestore.batch();
+        final paymentDoc = database.firestore
+            .collection(database.getUserCollectionPath('payments'))
+            .doc();
+        payment.id = paymentDoc.id;
+        batch.set(paymentDoc, payment.toJson());
+        batch.set(
+          database.firestore
+              .collection(database.getUserCollectionPath('customers'))
+              .doc(customer.id),
+          customer.toJson(),
+        );
+        await batch.commit();
+
+        if (!mounted) return;
+
+        Navigator.pop(context, true); // Return true to indicate success
+
+        // Invalidate providers to refresh UI
+        ref.invalidate(recentPaymentsProvider);
+        ref.invalidate(paymentSummaryProvider);
+        ref.invalidate(filteredPaymentsProvider);
+        ref.invalidate(activeCustomersProvider);
+        ref.invalidate(inactiveCustomersProvider); // For reactivation
+        ref.invalidate(expiringCustomersProvider);
+        ref.invalidate(databaseProvider);
+        ref.invalidate(customerProvider);
+        ref.invalidate(expiringSubscriptionsProvider);
+        ref.invalidate(notificationSchedulerProvider);
+
+        // Schedule notification for the updated subscription
+        await SubscriptionNotificationService.scheduleExpirationNotification(
+            customer);
+
+        // Show WiFi credentials dialog
         if (mounted) {
-          final customer =
-              await isar.customers.get(int.parse(_selectedCustomerId!));
-          Navigator.pop(context, true); // Return true to indicate success
-          // Invalidate providers to refresh UI
-          ref.invalidate(recentPaymentsProvider);
-          ref.invalidate(paymentSummaryProvider);
-          ref.invalidate(filteredPaymentsProvider);
-          ref.invalidate(activeCustomersProvider);
-          ref.invalidate(inactiveCustomersProvider); // For reactivation
-          ref.invalidate(expiringCustomersProvider);
-          ref.invalidate(syncingProvider);
-          ref.invalidate(databaseProvider);
-          ref.invalidate(customerProvider);
-          ref.invalidate(expiringSubscriptionsProvider);
-          ref.invalidate(notificationSchedulerProvider);
-
-          if (customer != null) {
-            // Schedule notification for the updated subscription
-            await SubscriptionNotificationService
-                .scheduleExpirationNotification(customer);
-
-            // Show WiFi credentials dialog
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('WiFi Credentials'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SelectableText('WiFi Name: ${customer.wifiName}'),
-                    const SizedBox(height: 8),
-                    SelectableText('Password: ${customer.currentPassword}'),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK'),
-                  ),
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('WiFi Credentials'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText('WiFi Name: ${customer.wifiName}'),
+                  const SizedBox(height: 8),
+                  SelectableText('Password: ${customer.currentPassword}'),
                 ],
               ),
-            );
-          }
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
         }
       } catch (e, stackTrace) {
         if (mounted) {

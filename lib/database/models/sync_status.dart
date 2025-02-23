@@ -1,26 +1,18 @@
-import 'package:isar/isar.dart';
+// class SyncStatus {
+//   String id; // Changed from Id to String
 
-part 'sync_status.g.dart';
+//   final int entityId;
 
-@collection
-class SyncStatus {
-  Id id = Isar.autoIncrement;
-  
-  @Index(type: IndexType.value)
-  final int entityId;
-  
-  @Index(type: IndexType.value)
-  final String entityType;
-  
-  @Index(type: IndexType.value)
-  final String operation;
-  
-  final DateTime timestamp;
+//   final String entityType;
 
-  SyncStatus({
-    required this.entityId,
-    required this.entityType,
-    required this.operation,
-    required this.timestamp,
-  });
-}
+//   final String operation;
+
+//   final DateTime timestamp;
+
+//   SyncStatus({
+//     required this.entityId,
+//     required this.entityType,
+//     required this.operation,
+//     required this.timestamp,
+//   }) : id = '';
+// }

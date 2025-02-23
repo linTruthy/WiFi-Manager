@@ -1,8 +1,8 @@
-import 'package:riverpod/riverpod.dart';
+// import 'package:riverpod/riverpod.dart';
 
-import 'database_provider.dart';
+// import 'database_provider.dart';
 
-final syncingProvider = StateProvider<bool>((ref) {
-  final database = ref.watch(databaseProvider);
-  return database.isSyncing;
-});
+// final syncingProvider = StateProvider<bool>((ref) {
+//   final database = ref.watch(databaseProvider);
+//   return database.isSyncing;
+// });

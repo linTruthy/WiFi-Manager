@@ -4,21 +4,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:truthy_wifi_manager/database/repository/database_repository.dart';
 
 import '../database/models/customer.dart';
-import '../providers/active_customer_trend_provider.dart';
 import '../providers/database_provider.dart';
-import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
-import '../providers/syncing_provider.dart';
 import '../services/ad_manager.dart';
 import '../services/subscription_widget_service.dart';
-import '../widgets/expiring_subscriptions_banner.dart';
 import 'login_screen.dart';
-import 'scheduled_reminders_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -30,8 +23,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
   final AdManager _adManager = AdManager();
   String _filter = 'This Month'; // Default filter
   @override
@@ -41,16 +32,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.2),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     _controller.forward();
     // Initialize ads
@@ -82,9 +63,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ref.invalidate(expiringSubscriptionsProvider);
     ref.invalidate(activeCustomersProvider);
     ref.invalidate(paymentSummaryProvider);
-    ref.watch(databaseProvider).syncPendingChanges();
-    ref.watch(databaseProvider).scheduleNotifications();
-    final isSyncing = ref.watch(syncingProvider);
+    // ref.watch(databaseProvider).syncPendingChanges();
+    // ref.watch(databaseProvider).scheduleNotifications();
+    // final isSyncing = ref.watch(syncingProvider);
     final activeCustomers =
         ref.watch(activeCustomersProvider); // Watch the FutureProvider
     final expiringSubscriptions = ref.watch(expiringSubscriptionsProvider);
@@ -131,10 +112,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         const SizedBox(height: 16),
                         _adManager.getBannerAdWidget(
                             maxWidth: MediaQuery.of(context).size.width - 24),
-                       const SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         _buildQuickActions(),
                         const SizedBox(height: 16),
-                        _buildSyncStatus(isSyncing),
+                        _buildActionButton('Downtime', CupertinoIcons.clock,
+                            Colors.red, '/downtime-input'),
                         const SizedBox(height: 16),
                         _adManager.getBannerAdWidget(
                             maxWidth: MediaQuery.of(context).size.width - 24),
@@ -301,100 +283,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
     );
   }
-
-  Widget _buildSyncStatus(bool isSyncing) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isSyncing)
-            const CircularProgressIndicator(
-                strokeWidth: 2, color: Colors.white),
-          const SizedBox(width: 8),
-          Text(
-            isSyncing
-                ? 'Syncing...'
-                : 'Last Synced: ${DateFormat('hh:mm a').format(DateTime.now())}',
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Widget _buildMainContent() {
-//   return SingleChildScrollView(
-//     physics: const BouncingScrollPhysics(),
-//     child: Column(
-//       children: [
-//         Padding(
-//           padding: const EdgeInsets.all(16.0),
-//           child: Column(
-//             crossAxisAlignment: CrossAxisAlignment.start,
-//             children: [
-//               const ExpiringSubscriptionsBanner(),
-//               const SizedBox(height: 24),
-//               _AnimatedStatsSection(ref: ref),
-//               const SizedBox(height: 24),
-//               _buildSectionHeader('Quick Actions'),
-//               const SizedBox(height: 16),
-//               _AnimatedActionsGrid(),
-//               const SizedBox(height: 24),
-//               // Add banner ad with glassmorphic style
-//               ClipRRect(
-//                 borderRadius: BorderRadius.circular(16),
-//                 child: BackdropFilter(
-//                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-//                   child: Container(
-//                     decoration: BoxDecoration(
-//                       color: Colors.white.withOpacity(0.1),
-//                       borderRadius: BorderRadius.circular(16),
-//                       border: Border.all(
-//                         color: Colors.white.withOpacity(0.2),
-//                       ),
-//                     ),
-//                     child: _adManager.getBannerAdWidget(
-//                       maxWidth: MediaQuery.of(context).size.width - 32,
-//                     ),
-//                   ),
-//                 ),
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     ),
-//   );
-// }
-
-Widget _buildSectionHeader(String title) {
-  return TweenAnimationBuilder<double>(
-    tween: Tween(begin: 0, end: 1),
-    duration: const Duration(milliseconds: 800),
-    curve: Curves.easeOut,
-    builder: (context, value, child) {
-      return Opacity(
-        opacity: value,
-        child: Transform.translate(
-          offset: Offset(0, 20 * (1 - value)),
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      );
-    },
-  );
 }
 
 class _AnimatedBackground extends StatefulWidget {
@@ -463,7 +351,9 @@ class _GradientPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GradientPainter oldDelegate) => true;
 }
-class _GlassmorphicAppBar extends ConsumerWidget implements PreferredSizeWidget {
+
+class _GlassmorphicAppBar extends ConsumerWidget
+    implements PreferredSizeWidget {
   final String title;
   final VoidCallback onNotificationTap;
 
@@ -578,282 +468,6 @@ class _GlassmorphicAppBar extends ConsumerWidget implements PreferredSizeWidget 
           ),
         ),
       ),
-    );
-  }
-}
-
-class _AnimatedStatsSection extends StatelessWidget {
-  final WidgetRef ref;
-
-  const _AnimatedStatsSection({required this.ref});
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1000),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, 30 * (1 - value)),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _GlassmorphicStatsCard(
-                    title: 'Active Customers',
-                    icon: CupertinoIcons.person_2_fill,
-                    iconColor: Colors.blue,
-                    content: Consumer(
-                      builder: (context, ref, child) {
-                        final customersAsync = ref.watch(
-                          activeCustomersProvider,
-                        );
-                        final trendAsync = ref.watch(
-                          activeCustomerTrendProvider,
-                        );
-
-                        return customersAsync.when(
-                          data: (customers) => trendAsync.when(
-                            data: (trend) => _AnimatedStatContent(
-                              value: customers.length.toString(),
-                              trend: '${trend.toStringAsFixed(1)}% this month',
-                            ),
-                            loading: () => const CircularProgressIndicator(),
-                            error: (_, __) => const Icon(Icons.error),
-                          ),
-                          loading: () => const CircularProgressIndicator(),
-                          error: (_, __) => const Icon(Icons.error),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _GlassmorphicStatsCard(
-                    title: 'Expiring Soon',
-                    icon: CupertinoIcons.exclamationmark_triangle_fill,
-                    iconColor: Colors.orange,
-                    content: Consumer(
-                      builder: (context, ref, child) {
-                        final expiringAsync = ref.watch(
-                          expiringCustomersProvider,
-                        );
-                        return expiringAsync.when(
-                          data: (customers) => _AnimatedStatContent(
-                            value: customers.length.toString(),
-                            trend: 'Next 3 days',
-                          ),
-                          loading: () => const CircularProgressIndicator(),
-                          error: (_, __) => const Icon(Icons.error),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _GlassmorphicStatsCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color iconColor;
-  final Widget content;
-
-  const _GlassmorphicStatsCard({
-    required this.title,
-    required this.icon,
-    required this.iconColor,
-    required this.content,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.2)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: iconColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, color: iconColor),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              content,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AnimatedStatContent extends StatelessWidget {
-  final String value;
-  final String trend;
-
-  const _AnimatedStatContent({required this.value, required this.trend});
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1500),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              this.value,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24 * value,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              trend,
-              style: TextStyle(
-                color: trend.startsWith('-') ? Colors.red : Colors.green,
-                fontSize: 12 * value,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _AnimatedActionsGrid extends StatelessWidget {
-  final AdManager _adManager = AdManager();
-
-  Future<void> _handleActionTap(BuildContext context, String route) async {
-    // Show interstitial ad with 30% probability when navigating
-    if (Random().nextDouble() < 0.3) {
-      final bool adShown = await _adManager.showInterstitialAd();
-      if (!adShown) {
-        // If ad fails to show, navigate immediately
-        Navigator.pushNamed(context, route);
-        return;
-      }
-      // Add a small delay after ad is shown before navigation
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-    Navigator.pushNamed(context, route);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      childAspectRatio: 1.5,
-      children: [
-        _buildAnimatedActionCard(
-          index: 0,
-          title: 'Add Customer',
-          icon: CupertinoIcons.person_add_solid,
-          gradient: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
-          onTap: () => _handleActionTap(context, '/add-customer'),
-        ),
-        _buildAnimatedActionCard(
-          index: 1,
-          title: 'Recent Payments',
-          icon: CupertinoIcons.money_dollar_circle_fill,
-          gradient: const [Color(0xFF1E88E5), Color(0xFF1565C0)],
-          onTap: () => _handleActionTap(context, '/payments'),
-        ),
-        _buildAnimatedActionCard(
-          index: 2,
-          title: 'View Customers',
-          icon: CupertinoIcons.person_2_fill,
-          gradient: const [Color(0xFF7E57C2), Color(0xFF4527A0)],
-          onTap: () => _handleActionTap(context, '/customers'),
-        ),
-        _buildAnimatedActionCard(
-          index: 3,
-          title: 'Expiring',
-          icon: CupertinoIcons.exclamationmark_triangle_fill,
-          gradient: const [Color(0xFFFF7043), Color(0xFFE64A19)],
-          onTap: () => _handleActionTap(context, '/expiring-subscriptions'),
-        ),
-        _buildAnimatedActionCard(
-          index: 3,
-          title: 'Down time',
-          icon: CupertinoIcons.clock_solid,
-          gradient: const [Color(0xFFFF7043), Color(0xFFE64A19)],
-          onTap: () => _handleActionTap(context, '/downtime-input'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAnimatedActionCard({
-    required int index,
-    required String title,
-    required IconData icon,
-    required List<Color> gradient,
-    required VoidCallback onTap,
-  }) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 800 + (index * 100)),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(0, 50 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: _GlassmorphicActionCard(
-              title: title,
-              icon: icon,
-              gradient: gradient,
-              onTap: onTap,
-            ),
-          ),
-        );
-      },
     );
   }
 }

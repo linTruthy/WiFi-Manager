@@ -1,0 +1,2 @@
+/home/user/WiFi-Manager/android/app/.cxx/RelWithDebInfo/4z6711u5/armeabi-v7a/CMakeFiles/edit_cache.dir
+/home/user/WiFi-Manager/android/app/.cxx/RelWithDebInfo/4z6711u5/armeabi-v7a/CMakeFiles/rebuild_cache.dir

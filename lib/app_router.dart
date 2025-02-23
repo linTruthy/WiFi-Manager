@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:truthy_wifi_manager/screens/customer_share_view.dart';
-
 import 'database/models/customer.dart';
 import 'providers/database_provider.dart';
 import 'screens/add_customer_screen.dart';
@@ -18,36 +17,26 @@ import 'screens/settings_screen.dart';
 
 class AppRouter {
   static Route<dynamic>? onGenerateRoute(
-    RouteSettings settings,
-    WidgetRef ref,
-  ) {
-    // Extract route generation logic
+      RouteSettings settings, WidgetRef ref) {
     return switch (settings.name) {
       '/login' => MaterialPageRoute(builder: (_) => const LoginScreen()),
       '/register' => MaterialPageRoute(builder: (_) => const RegisterScreen()),
-      
-      '/downtime-input' => MaterialPageRoute(
-        builder: (_) => const DowntimeInputScreen(),
-      ),
+      '/downtime-input' =>
+        MaterialPageRoute(builder: (_) => const DowntimeInputScreen()),
       final name when name?.startsWith('/customer/') ?? false =>
         MaterialPageRoute(
-          builder:
-              (context) => _buildCustomerDetailScreen(
-                settings.name!.split('/').last,
-                ref,
-              ),
+          builder: (context) =>
+              _buildCustomerDetailScreen(settings.name!.split('/').last, ref),
         ),
       final name when name?.startsWith('/edit-customer/') ?? false =>
         MaterialPageRoute(
-          builder:
-              (context) =>
-                  _buildEditCustomerScreen(settings.name!.split('/').last, ref),
+          builder: (context) =>
+              _buildEditCustomerScreen(settings.name!.split('/').last, ref),
         ),
       _ => null,
     };
   }
 
-  // Separate widget builders to reduce complexity
   static Widget _buildCustomerDetailScreen(String customerId, WidgetRef ref) {
     return FutureBuilder<Customer?>(
       future: _getCustomerById(customerId, ref),
@@ -72,11 +61,8 @@ class AppRouter {
     );
   }
 
-  // Reusable loading/error handler
   static Widget buildLoadingOrError(
-    AsyncSnapshot<Customer?> snapshot,
-    Widget Function(Customer) onData,
-  ) {
+      AsyncSnapshot<Customer?> snapshot, Widget Function(Customer) onData) {
     if (snapshot.connectionState == ConnectionState.waiting) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -86,16 +72,16 @@ class AppRouter {
     return onData(snapshot.data!);
   }
 
-  // Optimize database access
   static Future<Customer?> _getCustomerById(
-    String customerId,
-    WidgetRef ref,
-  ) async {
-    final isar = await ref.read(databaseProvider).db;
-    return isar.customers.get(int.parse(customerId));
+      String customerId, WidgetRef ref) async {
+    final database = ref.read(databaseProvider);
+    final doc = await database.firestore
+        .collection(database.getUserCollectionPath('customers'))
+        .doc(customerId)
+        .get();
+    return doc.exists ? Customer.fromJson(doc.id, doc.data()!) : null;
   }
 
-  // Define static routes
   static final routes = {
     '/': (context) => const LoginScreen(),
     '/login': (context) => const LoginScreen(),

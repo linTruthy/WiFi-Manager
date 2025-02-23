@@ -1,23 +1,36 @@
-import 'package:isar/isar.dart';
 
-part 'referral_stats.g.dart';
-
-@Collection(inheritance: false)
 class ReferralStats {
-  Id id = Isar.autoIncrement;
-  String referrerId; // ID of the customer who made the referral
-  String referredCustomerId; // ID of the customer who was referred
-  DateTime referralDate; // Date when the referral was made
-  int rewardDurationMillis; // Duration of the reward applied in milliseconds
+  String id; // Changed from Id to String
+  String referrerId;
+  String referredCustomerId;
+  DateTime referralDate;
+  int rewardDurationMillis;
 
   ReferralStats({
     required this.referrerId,
     required this.referredCustomerId,
     required this.referralDate,
     required this.rewardDurationMillis,
-  });
+  }) : id = ''; // Initialize as empty; will be set when saving
 
-  // Factory method to create ReferralStats with Duration
+  Map<String, dynamic> toJson() {
+    return {
+      'referrerId': referrerId,
+      'referredCustomerId': referredCustomerId,
+      'referralDate': referralDate.toIso8601String(),
+      'rewardDurationMillis': rewardDurationMillis,
+    };
+  }
+
+  static ReferralStats fromJson(String id, Map<String, dynamic> json) {
+    return ReferralStats(
+      referrerId: json['referrerId'] as String,
+      referredCustomerId: json['referredCustomerId'] as String,
+      referralDate: DateTime.parse(json['referralDate'] as String),
+      rewardDurationMillis: json['rewardDurationMillis'] as int,
+    )..id = id;
+  }
+
   factory ReferralStats.fromDuration({
     required String referrerId,
     required String referredCustomerId,
