@@ -68,7 +68,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final activeCustomers =
         ref.watch(activeCustomersProvider); // Watch the FutureProvider
     final expiringSubscriptions = ref.watch(expiringSubscriptionsProvider);
-   
+
     ref.listen(expiringSubscriptionsProvider, (previous, next) {
       next.whenData((customers) {
         activeCustomers.whenData((activeCount) {
@@ -84,7 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         });
       });
     });
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       extendBodyBehindAppBar: true,

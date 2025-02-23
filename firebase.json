@@ -24,7 +24,7 @@
         }
     },
     "hosting": {
-        "public": "web",
+        "source":".",
         "ignore": [
             "firebase.json",
             "**/.*",
@@ -32,7 +32,7 @@
         ],
         "rewrites": [
             {
-                "source": "**",
+                "source": "!{**.js,**.png,**.json,**.ico}",
                 "destination": "/index.html"
             }
         ],
