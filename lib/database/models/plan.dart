@@ -1,39 +1,6 @@
+import 'package:shared_preferences/shared_preferences.dart';
 
-// import 'package:isar/isar.dart';
-
-// import 'customer.dart';
-// part 'plan.g.dart';
-
-// // enum PlanType {
-// //   daily,
-// //   weekly,
-// //   monthly
-// // }
-
-
-// @Collection()
-// class Plan {
-//   Id id = Isar.autoIncrement;
-
-//   @Enumerated(EnumType.name)
-//   PlanType type;
-  
-//   double price;
-//   int durationInDays;
-  
-//   Plan({
-   
-//     required this.type,
-//     required this.price,
-//     required this.durationInDays,
-//   });
-// }
-
-enum PlanType {
-  daily,
-  weekly,
-  monthly
-}
+enum PlanType { daily, weekly, monthly }
 
 class Plan {
   String id; // Changed from Id to String
@@ -64,5 +31,26 @@ class Plan {
       price: json['price'] as double,
       durationInDays: json['durationInDays'] as int,
     )..id = id;
+  }
+
+  Future<List<Plan>> getPlans() async {
+    final prefs = await SharedPreferences.getInstance();
+    return [
+      Plan(
+        type: PlanType.daily,
+        price: prefs.getDouble('dailyPrice') ?? 1000.0,
+        durationInDays: 1,
+      ),
+      Plan(
+        type: PlanType.weekly,
+        price: prefs.getDouble('weeklyPrice') ?? 5000.0,
+        durationInDays: 7,
+      ),
+      Plan(
+        type: PlanType.monthly,
+        price: prefs.getDouble('monthlyPrice') ?? 15000.0,
+        durationInDays: 30,
+      ),
+    ];
   }
 }

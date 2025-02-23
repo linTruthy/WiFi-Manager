@@ -272,7 +272,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               color: Colors.grey,
             ),
           ),
-          Text(value, style: const TextStyle(fontSize: 16)),
+          SelectableText(value, style: const TextStyle(fontSize: 16)),
         ],
       ),
     );

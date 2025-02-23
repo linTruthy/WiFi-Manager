@@ -358,7 +358,7 @@ class _CustomerShareViewState extends State<CustomerShareView> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                SelectableText(
                   value,
                   style: TextStyle(
                     color: Colors.grey[600],

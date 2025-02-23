@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/billing_cycle.dart';
 import '../models/customer.dart';
 import '../models/payment.dart';
 import '../models/referral_stats.dart';
@@ -153,6 +154,23 @@ class DatabaseRepository {
     return snapshot.docs.length;
   }
 
+  Future<void> saveBillingCycle(BillingCycle cycle) async {
+    final collectionPath = getUserCollectionPath('billing_cycles');
+    if (cycle.id.isEmpty) {
+      final docRef = firestore.collection(collectionPath).doc();
+      cycle.id = docRef.id;
+      await docRef.set(cycle.toJson());
+    } else {
+      await firestore
+          .collection(collectionPath)
+          .doc(cycle.id)
+          .set(cycle.toJson());
+    }
+  }
+Future<List<BillingCycle>> getBillingCycles() async {
+  final snapshot = await firestore.collection(getUserCollectionPath('billing_cycles')).get();
+  return snapshot.docs.map((doc) => BillingCycle.fromJson(doc.id, doc.data())).toList();
+}
   Future<Duration> getTotalRewardDuration(String referrerId) async {
     try {
       final referralStats = await getReferralStats(referrerId);

@@ -115,9 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             maxWidth: MediaQuery.of(context).size.width - 24),
                         const SizedBox(height: 16),
                         _buildQuickActions(),
-                        const SizedBox(height: 16),
-                        _buildActionButton('Downtime', CupertinoIcons.clock,
-                            Colors.red, '/downtime-input'),
+
                         const SizedBox(height: 16),
                         _adManager.getBannerAdWidget(
                             maxWidth: MediaQuery.of(context).size.width - 24),
@@ -254,6 +252,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             CupertinoIcons.exclamationmark_triangle_fill,
             Colors.orange,
             '/expiring-subscriptions'),
+        _buildActionButton(
+            'Downtime', CupertinoIcons.clock, Colors.red, '/downtime-input'),
+        _buildActionButton('Billing', CupertinoIcons.money_dollar, Colors.teal,
+            '/billing-cycles'),
+        _buildActionButton('Retention', CupertinoIcons.chart_bar_fill,
+            Colors.cyan, '/retention'),
       ],
     );
   }
@@ -394,6 +398,10 @@ class _GlassmorphicAppBar extends ConsumerWidget
                   ),
                 ),
                 const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.help),
+                  onPressed: () => Navigator.pushNamed(context, '/how-to'),
+                ),
                 Stack(
                   children: [
                     IconButton(

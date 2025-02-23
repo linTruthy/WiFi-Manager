@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/models/payment.dart';
 import '../database/models/plan.dart';
 import '../database/models/customer.dart';
@@ -25,14 +26,24 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
   PlanType _selectedPlan = PlanType.monthly;
   final _amountController = TextEditingController();
   DateTime _startDate = DateTime.now();
+  late List<Plan> _plans; // Store the plans fetched from getPlans()
 
   @override
   void initState() {
     super.initState();
+    _loadPlans(); // Load plans when initializing
     if (widget.customer != null) {
       _selectedCustomerId = widget.customer!.id;
       _selectedPlan = widget.customer!.planType;
       _updateAmount(); // Set default amount based on plan
+    }
+  }
+
+  // Fetch plans asynchronously and update state
+  Future<void> _loadPlans() async {
+    _plans = await getPlans(); // Fetch plans from Plan model
+    if (mounted) {
+      setState(() {}); // Trigger rebuild if needed
     }
   }
 
@@ -188,29 +199,21 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
     }
   }
 
+  // Update amount based on user-configured plan prices
   void _updateAmount() {
-    switch (_selectedPlan) {
-      case PlanType.daily:
-        _amountController.text = '2000';
-        break;
-      case PlanType.weekly:
-        _amountController.text = '10000';
-        break;
-      case PlanType.monthly:
-        _amountController.text = '35000';
-        break;
-    }
+    final selectedPlan = _plans.firstWhere(
+      (plan) => plan.type == _selectedPlan,
+      orElse: () => Plan(type: _selectedPlan, price: 0.0, durationInDays: 1),
+    );
+    _amountController.text = selectedPlan.price.toStringAsFixed(0);
   }
 
   DateTime _calculateEndDate(DateTime startDate, PlanType planType) {
-    switch (planType) {
-      case PlanType.daily:
-        return startDate.add(const Duration(days: 1));
-      case PlanType.weekly:
-        return startDate.add(const Duration(days: 7));
-      case PlanType.monthly:
-        return startDate.add(const Duration(days: 30));
-    }
+    final selectedPlan = _plans.firstWhere(
+      (plan) => plan.type == planType,
+      orElse: () => Plan(type: planType, price: 0.0, durationInDays: 1),
+    );
+    return startDate.add(Duration(days: selectedPlan.durationInDays));
   }
 
   Future<void> _savePayment() async {
@@ -327,5 +330,26 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
         }
       }
     }
+  }
+
+  Future<List<Plan>> getPlans() async {
+    final prefs = await SharedPreferences.getInstance();
+    return [
+      Plan(
+        type: PlanType.daily,
+        price: prefs.getDouble('dailyPrice') ?? 1000.0,
+        durationInDays: 1,
+      ),
+      Plan(
+        type: PlanType.weekly,
+        price: prefs.getDouble('weeklyPrice') ?? 5000.0,
+        durationInDays: 7,
+      ),
+      Plan(
+        type: PlanType.monthly,
+        price: prefs.getDouble('monthlyPrice') ?? 15000.0,
+        durationInDays: 30,
+      ),
+    ];
   }
 }
