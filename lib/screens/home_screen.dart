@@ -7,11 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/models/customer.dart';
 import '../providers/database_provider.dart';
+import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../services/ad_manager.dart';
+import '../services/app_preferences.dart';
 import '../services/subscription_widget_service.dart';
 import 'login_screen.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +28,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late AnimationController _controller;
   final AdManager _adManager = AdManager();
   String _filter = 'This Month';
+  final GlobalKey _customersKey = GlobalKey();
+  final GlobalKey _paymentsKey = GlobalKey();
+  final GlobalKey _expiringKey = GlobalKey();
+  final GlobalKey _downtimeKey = GlobalKey();
+  final GlobalKey _billingKey = GlobalKey();
+  final GlobalKey _retentionKey = GlobalKey();
+  final GlobalKey _howToKey = GlobalKey();
+  final GlobalKey _settingsKey = GlobalKey();
+  final _filterKey = GlobalKey();
+  final _quickActionsKey = GlobalKey();
+  final _notificationsKey = GlobalKey();
 
   @override
   void initState() {
@@ -44,7 +58,265 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.invalidate(expiringSubscriptionsProvider);
       ref.invalidate(activeCustomersProvider);
       ref.invalidate(paymentSummaryProvider);
+      ref.invalidate(scheduledNotificationsProvider);
     });
+    _checkAndShowTutorial();
+  }
+
+  Future<void> _checkAndShowTutorial() async {
+    final isFirstTime = await AppPreferences.isFirstTime();
+    if (isFirstTime && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showTutorial();
+      });
+    }
+  }
+
+  void _showTutorial() {
+    final tutorial = TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: Colors.black.withOpacity(0.8),
+      paddingFocus: 10,
+      opacityShadow: 0.8,
+      onFinish: () async {
+        await AppPreferences.setNotFirstTime();
+      },
+      onSkip: () {
+        AppPreferences.setNotFirstTime();
+        return true;
+      },
+    );
+    tutorial.show(context: context);
+  }
+
+  List<TargetFocus> _createTargets() {
+    return [
+      TargetFocus(
+        identify: "customers",
+        keyTarget: _customersKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Text(
+              "View and manage your active customers here.",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "payments",
+        keyTarget: _paymentsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Text(
+              "Track customer payments and billing cycles.",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "expiring",
+        keyTarget: _expiringKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Text(
+              "Monitor subscriptions nearing their end.",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "filters",
+        keyTarget: _filterKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Time Filters",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RichText(
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "Filter data by different time periods\n",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: "• Today\n• This Week\n• This Month",
+                        style: TextStyle(fontSize: 14, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "stats",
+        keyTarget: _customersKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Key Metrics",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RichText(
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "Monitor your key business metrics:\n",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text:
+                            "• Active Customers\n• Expiring Subscriptions\n• Revenue\n• New Customers",
+                        style: TextStyle(fontSize: 14, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "quick_actions",
+        keyTarget: _quickActionsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Quick Actions",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  child: const Text(
+                    "Access common tasks quickly:\n"
+                    "• Add new customers\n"
+                    "• View payments\n"
+                    "• Manage subscriptions\n"
+                    "• Handle downtime\n"
+                    "• View billing cycles",
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "notifications",
+        keyTarget: _notificationsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.left,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Notifications",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "View and manage upcoming subscription reminders. "
+                  "The badge shows pending notifications.",
+                  style: TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "settings",
+        keyTarget: _settingsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.left,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Settings & Help",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Access app settings, tutorials, and support options here.",
+                  style: TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+    ];
   }
 
   Future<void> _initializeAds() async {
@@ -133,6 +405,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   Widget _buildFilterBar() {
     return SingleChildScrollView(
+      key: _filterKey,
       scrollDirection: Axis.horizontal,
       child: Row(
         children: ['Today', 'This Week', 'This Month']
@@ -163,12 +436,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         Row(
           children: [
             Expanded(
-                child: _buildStatCard(
-                    'Active', activeCustomers, Colors.green, '/customers')),
+                child: _buildStatCard(_customersKey, 'Active', activeCustomers,
+                    Colors.green, '/customers')),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard('Expiring Today', expiringSubscriptions,
-                    Colors.red, '/expiring-subscriptions')),
+                child: _buildStatCard(
+                    _expiringKey,
+                    'Expiring Today',
+                    expiringSubscriptions,
+                    Colors.red,
+                    '/expiring-subscriptions')),
           ],
         ),
         const SizedBox(height: 12),
@@ -176,14 +453,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             Expanded(
                 child: _buildStatCard(
+                    _paymentsKey,
                     'Revenue',
                     ref.watch(paymentSummaryProvider),
                     Colors.blue,
                     '/payments')),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard('New This Week', activeCustomers,
-                    Colors.purple, '/customers')),
+                child: _buildStatCard(_retentionKey, 'New This Week',
+                    activeCustomers, Colors.purple, '/customers')),
           ],
         ),
       ],
@@ -191,10 +469,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildStatCard(
-      String title, AsyncValue data, Color color, String route) {
+      GlobalKey key, String title, AsyncValue data, Color color, String route) {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, route),
       child: Container(
+        key: key,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
@@ -234,6 +513,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   Widget _buildQuickActions() {
     return GridView.count(
+      key: _quickActionsKey,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2,
@@ -405,6 +685,7 @@ class _GlassmorphicAppBar extends ConsumerWidget
                 Stack(
                   children: [
                     IconButton(
+                      //   key: _notificationsKey,
                       icon: const Icon(
                         CupertinoIcons.bell,
                         color: Colors.white,
@@ -457,6 +738,7 @@ class _GlassmorphicAppBar extends ConsumerWidget
                 ),
                 const SizedBox(width: 8),
                 IconButton(
+                  //    key: _settingsKey,
                   icon: const Icon(Icons.settings),
                   onPressed: () => Navigator.pushNamed(context, '/settings'),
                   color: Colors.white,

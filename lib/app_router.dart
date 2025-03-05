@@ -17,6 +17,7 @@ import 'screens/how_to_screen.dart';
 import 'screens/inactive_customers_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/payments_screen.dart';
+import 'screens/scheduled_reminders_screen.dart';
 import 'screens/settings_screen.dart';
 
 class AppRouter {
@@ -35,9 +36,12 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const CustomerShareView());
       case '/settings':
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
+      case '/scheduled-reminders':
+        return MaterialPageRoute(
+            builder: (_) => const ScheduledRemindersScreen());
       case '/billing-cycles':
         return MaterialPageRoute(builder: (_) => const BillingCycleScreen());
-     case '/retention':
+      case '/retention':
         return MaterialPageRoute(builder: (_) => const RetentionScreen());
       case '/about':
         return MaterialPageRoute(builder: (_) => const AboutScreen());
@@ -132,6 +136,7 @@ class AppRouter {
     '/billing-cycles': (context) => const BillingCycleScreen(),
     '/retention': (context) => const RetentionScreen(),
     '/about': (context) => const AboutScreen(),
-  '/how-to': (context) => const HowToScreen(),
+    '/how-to': (context) => const HowToScreen(),
+    '/scheduled-reminders': (context) => const ScheduledRemindersScreen(),
   };
 }

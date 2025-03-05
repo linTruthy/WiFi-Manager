@@ -13,6 +13,7 @@ import 'app_router.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'services/auth_service.dart';
+import 'services/notification_scheduler.dart';
 import 'services/subscription_notification_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -108,6 +109,7 @@ void main() async {
     await _configureLocalTimeZone();
     await SubscriptionNotificationService.initialize();
     await MobileAds.instance.initialize();
+    NotificationScheduler();
     await SubscriptionNotificationService.clearExpiredNotifications();
     final authService = AuthService();
     initialRoute = await authService.getInitialRoute();

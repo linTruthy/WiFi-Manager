@@ -84,7 +84,7 @@ class InactiveCustomersScreen extends ConsumerWidget {
       );
       final message =
           'Your subscription has been reactivated. Thank you for choosing our services!';
-      await SubscriptionNotificationService.scheduleExpirationNotification(
+      await SubscriptionNotificationService.scheduleSingleExpirationNotification(
           customer);
       print('Notification sent to ${customer.name}: $message');
     }
@@ -107,7 +107,7 @@ class InactiveCustomersScreen extends ConsumerWidget {
       );
       final message =
           'Your subscription has been reactivated with a new payment. Thank you!';
-      await SubscriptionNotificationService.scheduleExpirationNotification(
+      await SubscriptionNotificationService.scheduleSingleExpirationNotification(
           customer);
       print('Notification sent to ${customer.name}: $message');
     }

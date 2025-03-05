@@ -54,3 +54,6 @@ class Plan {
     ];
   }
 }
+// extension StringExtension on String {
+//   dynamic let(Function(String) fn) => fn(this);
+// }

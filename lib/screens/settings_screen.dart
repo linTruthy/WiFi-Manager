@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,16 +15,16 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late double _daysBeforeDaily;
-  late double _daysBeforeWeekly;
-  late double _daysBeforeMonthly;
-  late bool _priorityUrgent;
-  late bool _enableSnooze;
+  // late double _daysBeforeDaily;
+  // late double _daysBeforeWeekly;
+  // late double _daysBeforeMonthly;
+  // late bool _priorityUrgent;
+  // late bool _enableSnooze;
   late double _dailyPrice;
   late double _weeklyPrice;
   late double _monthlyPrice;
   bool _isSaving = false;
-
+  late Map<String, dynamic> _notificationSettings;
   @override
   void initState() {
     super.initState();
@@ -36,16 +35,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await SubscriptionNotificationService.loadSettings();
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _daysBeforeDaily = SubscriptionNotificationService
-          .reminderSettings['daysBeforeDaily'] as double;
-      _daysBeforeWeekly = SubscriptionNotificationService
-          .reminderSettings['daysBeforeWeekly'] as double;
-      _daysBeforeMonthly = SubscriptionNotificationService
-          .reminderSettings['daysBeforeMonthly'] as double;
-      _priorityUrgent = SubscriptionNotificationService
-          .reminderSettings['priorityUrgent'] as bool;
-      _enableSnooze = SubscriptionNotificationService
-          .reminderSettings['enableSnooze'] as bool;
+      _notificationSettings =
+          Map.from(SubscriptionNotificationService.reminderSettings);
 
       _dailyPrice = prefs.getDouble('dailyPrice') ?? 2000.0;
       _weeklyPrice = prefs.getDouble('weeklyPrice') ?? 10000.0;
@@ -97,50 +88,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            _buildSliderWithLabel(
-              label: 'Daily Expiration',
-              value: _daysBeforeDaily,
-              min: 0.1,
-              max: 1.0,
-              divisions: 9,
-              unit: 'hours',
-              onChanged: (value) => setState(() => _daysBeforeDaily = value),
-            ),
-            _buildSliderWithLabel(
-              label: 'Weekly Expiration',
-              value: _daysBeforeWeekly,
-              min: 0.5,
-              max: 2.0,
-              divisions: 8,
-              unit: 'days',
-              onChanged: (value) => setState(() => _daysBeforeWeekly = value),
-            ),
-            _buildSliderWithLabel(
-              label: 'Monthly Expiration',
-              value: _daysBeforeMonthly,
-              min: 1.0,
-              max: 7.0,
-              divisions: 12,
-              unit: 'days',
-              onChanged: (value) => setState(() => _daysBeforeMonthly = value),
-            ),
-            const Divider(height: 24),
-            CheckboxListTile(
-              title: const Text(
-                  'Prioritize urgent notifications (expiring today)'),
-              value: _priorityUrgent,
-              onChanged: (value) =>
-                  setState(() => _priorityUrgent = value ?? true),
-            ),
-            CheckboxListTile(
-              title: const Text('Enable snooze option'),
-              value: _enableSnooze,
-              onChanged: (value) =>
-                  setState(() => _enableSnooze = value ?? true),
-            ),
+            _buildSlider('Daily Plan (days before)', 'daysBeforeDaily'),
+            _buildSlider('Weekly Plan (days before)', 'daysBeforeWeekly'),
+            _buildSlider('Monthly Plan (days before)', 'daysBeforeMonthly'),
+            //   const Divider(height: 24),
+            // CheckboxListTile(
+            //   title: const Text(
+            //       'Prioritize urgent notifications (expiring today)'),
+            //   value: _priorityUrgent,
+            //   onChanged: (value) =>
+            //       setState(() => _priorityUrgent = value ?? true),
+            // ),
+            // CheckboxListTile(
+            //   title: const Text('Enable snooze option'),
+            //   value: _enableSnooze,
+            //   onChanged: (value) =>
+            //       setState(() => _enableSnooze = value ?? true),
+            // ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Build a slider widget for adjusting days
+  Widget _buildSlider(String label, String key) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 16)),
+        Slider(
+          value: _notificationSettings[key].toDouble(),
+          min: 0,
+          max: 7,
+          divisions: 7,
+          label: _notificationSettings[key].toString(),
+          onChanged: (value) {
+            setState(() {
+              _notificationSettings[key] = value.round();
+            });
+          },
+        ),
+      ],
     );
   }
 
@@ -234,17 +223,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveSettings() async {
     setState(() => _isSaving = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble('dailyPrice', _dailyPrice);
-      await prefs.setDouble('weeklyPrice', _weeklyPrice);
-      await prefs.setDouble('monthlyPrice', _monthlyPrice);
-      await SubscriptionNotificationService.saveSettings({
-        'daysBeforeDaily': _daysBeforeDaily,
-        'daysBeforeWeekly': _daysBeforeWeekly,
-        'daysBeforeMonthly': _daysBeforeMonthly,
-        'priorityUrgent': _priorityUrgent,
-        'enableSnooze': _enableSnooze,
-      });
+      await SubscriptionNotificationService.saveSettings(_notificationSettings);
 
       final database = ref.read(databaseProvider);
       await _updatePlanPrices(database);

@@ -1,9 +1,8 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/intl.dart';
-import '../database/models/payment.dart';
+import '../database/models/plan.dart';
 import '../providers/customer_provider.dart';
 import '../providers/payment_provider.dart';
 import '../services/ad_manager.dart';
@@ -18,10 +17,17 @@ class PaymentsScreen extends ConsumerStatefulWidget {
 
 class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   final AdManager _adManager = AdManager();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   @override
   void initState() {
     super.initState();
     _initializeAds();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
   }
 
   Future<void> _initializeAds() async {
@@ -32,6 +38,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   @override
   void dispose() {
     _showExitInterstitial();
+    _searchController.dispose();
     _adManager.dispose();
     super.dispose();
   }
@@ -42,8 +49,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final paymentsAsync = ref.watch(filteredPaymentsProvider);
-    final summaryAsync = ref.watch(paymentSummaryProvider);
+    final filteredPaymentsAsync = ref.watch(filteredPaymentsProvider);
+    final paymentSummaryAsync = ref.watch(paymentSummaryProvider);
+    final selectedDateRange = ref.watch(selectedDateRangeProvider);
+
     return WillPopScope(
       onWillPop: () async {
         await _showExitInterstitial();
@@ -51,51 +60,178 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Payment History'),
+          title: const Text('Payments'),
           actions: [
             IconButton(
-              icon: const Icon(CupertinoIcons.calendar),
-              onPressed: () => _showDateRangePicker(context),
+              icon: const Icon(Icons.date_range),
+              onPressed: () => _selectDateRange(context, ref),
+              tooltip: 'Select date range',
             ),
-            IconButton(
-              icon: const Icon(CupertinoIcons.add),
-              onPressed: () => _showAddPaymentDialog(context),
-            ),
+            if (selectedDateRange != null)
+              IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  ref.read(selectedDateRangeProvider.notifier).state = null;
+                },
+                tooltip: 'Clear date range',
+              ),
           ],
         ),
         body: Column(
           children: [
-            Consumer(
-              builder: (context, ref, child) {
-                final dateRange = ref.watch(selectedDateRangeProvider);
-                if (dateRange == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Chip(
-                    label: Text(
-                      '${DateFormat('MMM d').format(dateRange.start)} - '
-                      '${DateFormat('MMM d').format(dateRange.end)}',
-                    ),
-                    onDeleted: () =>
-                        ref.read(selectedDateRangeProvider.notifier).state = null,
-                  ),
-                );
-              },
-            ),
-            _PaymentSummaryCard(summaryAsync: summaryAsync),
-            Expanded(
-              child: paymentsAsync.when(
-                data: (payments) => payments.isEmpty
-                    ? const Center(child: Text('No payments found'))
-                    : ListView.builder(
-                        itemCount: payments.length,
-                        itemBuilder: (context, index) =>
-                            _PaymentListTile(payment: payments[index]),
-                      ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stack) => Center(child: Text('Error: $error')),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  labelText: 'Search by customer name',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
+            // Selected Date Range Display
+            if (selectedDateRange != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Showing payments from ${DateFormat('MMM d, y').format(selectedDateRange.start)} to ${DateFormat('MMM d, y').format(selectedDateRange.end)}',
+                  style: const TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ),
+            Expanded(
+              child: filteredPaymentsAsync.when(
+                data: (payments) {
+                  final filteredPayments = payments.where((payment) {
+                    final customerName = payment.customerId.toLowerCase();
+                    return customerName.contains(_searchQuery);
+                  }).toList();
+
+                  return ListView.builder(
+                    itemCount: filteredPayments.length,
+                    itemBuilder: (context, index) {
+                      final payment = filteredPayments[index];
+                      final customerAsync =
+                          ref.watch(customerProvider(payment.customerId));
+                      return ListTile(
+                        leading: _getPlanIcon(payment.planType),
+                        title: Text(
+                          'UGX ${payment.amount.toStringAsFixed(0)} • ${payment.planType.name}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: customerAsync.when(
+                          data: (customer) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(customer?.name ?? 'Unknown Customer'),
+                                  if (customer != null && !customer.isActive)
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 8.0),
+                                      child: Text(
+                                        '(Inactive)',
+                                        style: TextStyle(
+                                            color: Colors.red, fontSize: 12),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              Text(
+                                '${payment.customerId} • ${DateFormat('MMM d, y').format(payment.paymentDate)}',
+                              ),
+                            ],
+                          ),
+                          loading: () => const Text('Loading...'),
+                          error: (_, __) => const Text('Unknown Customer'),
+                        ),
+                        // subtitle: Text(
+                        //   '${payment.customerId} • ${DateFormat('MMM d, y').format(payment.paymentDate)}',
+                        // ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              payment.isConfirmed
+                                  ? Icons.check_circle
+                                  : Icons.pending,
+                              color: payment.isConfirmed
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                            ReceiptButton(payment: payment),
+                          ],
+                        ),
+                        onTap: () {
+                          // Navigate to payment details screen
+                        },
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => Center(child: Text('Error: $error')),
+              ),
+            ),
+            // Summary Section
+            paymentSummaryAsync.when(
+              data: (summary) => Card(
+                margin: const EdgeInsets.all(16.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Summary',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      _buildSummaryRow('Daily', summary['daily'] ?? 0),
+                      _buildSummaryRow('Weekly', summary['weekly'] ?? 0),
+                      _buildSummaryRow('Monthly', summary['monthly'] ?? 0),
+                      const Divider(),
+                      _buildSummaryRow('Total', summary['total'] ?? 0,
+                          isTotal: true),
+                    ],
+                  ),
+                ),
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+
+            // Consumer(
+            //   builder: (context, ref, child) {
+            //     final dateRange = ref.watch(selectedDateRangeProvider);
+            //     if (dateRange == null) return const SizedBox.shrink();
+            //     return Padding(
+            //       padding: const EdgeInsets.all(8.0),
+            //       child: Chip(
+            //         label: Text(
+            //           '${DateFormat('MMM d').format(dateRange.start)} - '
+            //           '${DateFormat('MMM d').format(dateRange.end)}',
+            //         ),
+            //         onDeleted: () => ref
+            //             .read(selectedDateRangeProvider.notifier)
+            //             .state = null,
+            //       ),
+            //     );
+            //   },
+            // ),
+            //   _PaymentSummaryCard(summaryAsync: summaryAsync),
+            // Expanded(
+            //   child: paymentsAsync.when(
+            //     data: (payments) => payments.isEmpty
+            //         ? const Center(child: Text('No payments found'))
+            //         : ListView.builder(
+            //             itemCount: payments.length,
+            //             itemBuilder: (context, index) =>
+            //                 _PaymentListTile(payment: payments[index]),
+            //           ),
+            //     loading: () => const Center(child: CircularProgressIndicator()),
+            //     error: (error, stack) => Center(child: Text('Error: $error')),
+            //   ),
+            // ),
             Center(
               child: _adManager.getBannerAdWidget(
                 maxWidth: MediaQuery.of(context).size.width,
@@ -103,20 +239,60 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
             ),
           ],
         ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        floatingActionButton: FloatingActionButton.extended(
+          heroTag: 'add_payment',
+          isExtended: true,
+          onPressed: () {
+            _showAddPaymentDialog(context);
+          },
+          tooltip: 'Add Payment',
+          label: const Text('Add Payment'),
+          icon: const Icon(Icons.add),
+        ),
       ),
     );
   }
 
-  Future<void> _showDateRangePicker(BuildContext context) async {
-    final dateRange = await showDateRangePicker(
+  Future<void> _selectDateRange(BuildContext context, WidgetRef ref) async {
+    final initialDateRange = ref.read(selectedDateRangeProvider);
+    final picked = await showDateRangePicker(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      firstDate: DateTime(2000),
       lastDate: DateTime.now(),
-      currentDate: DateTime.now(),
+      initialDateRange: initialDateRange,
     );
-    if (dateRange != null && mounted) {
-      ref.read(selectedDateRangeProvider.notifier).state = dateRange;
+    if (picked != null) {
+      ref.read(selectedDateRangeProvider.notifier).state = picked;
     }
+  }
+
+  Icon _getPlanIcon(PlanType planType) {
+    switch (planType) {
+      case PlanType.daily:
+        return const Icon(Icons.calendar_today, color: Colors.blue);
+      case PlanType.weekly:
+        return const Icon(Icons.calendar_view_week, color: Colors.green);
+      case PlanType.monthly:
+        return const Icon(Icons.calendar_view_month, color: Colors.orange);
+    }
+  }
+
+  Widget _buildSummaryRow(String label, double amount, {bool isTotal = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
+          Text('UGX ${amount.toStringAsFixed(0)}',
+              style: TextStyle(
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
+    );
   }
 
   Future<void> _showAddPaymentDialog(BuildContext context) async {
@@ -127,98 +303,5 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     if (result == true) {
       await _adManager.showInterstitialAd();
     }
-  }
-}
-
-class _PaymentSummaryCard extends StatelessWidget {
-  final AsyncValue<Map<String, double>> summaryAsync;
-  const _PaymentSummaryCard({required this.summaryAsync});
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.all(8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: summaryAsync.when(
-          data: (summary) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Total Revenue: UGX ${summary['total']?.toStringAsFixed(0)}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const Divider(),
-              _SummaryRow(title: 'Daily Plans:', amount: summary['daily'] ?? 0),
-              _SummaryRow(title: 'Weekly Plans:', amount: summary['weekly'] ?? 0),
-              _SummaryRow(title: 'Monthly Plans:', amount: summary['monthly'] ?? 0),
-            ],
-          ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => Center(child: Text('Error: $error')),
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  final String title;
-  final double amount;
-  const _SummaryRow({required this.title, required this.amount});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(title), Text('UGX ${amount.toStringAsFixed(0)}')],
-      ),
-    );
-  }
-}
-
-class _PaymentListTile extends ConsumerWidget {
-  final Payment payment;
-  const _PaymentListTile({required this.payment});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final customerAsync = ref.watch(customerProvider(payment.customerId));
-    return ListTile(
-      leading: Icon(
-        payment.isConfirmed ? Icons.check_circle : Icons.pending,
-        color: payment.isConfirmed ? Colors.green : Colors.orange,
-      ),
-      title: customerAsync.when(
-        data: (customer) => Row(
-          children: [
-            Text(customer?.name ?? 'Unknown Customer'),
-            if (customer != null && !customer.isActive)
-              const Padding(
-                padding: EdgeInsets.only(left: 8.0),
-                child: Text(
-                  '(Inactive)',
-                  style: TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
-        loading: () => const Text('Loading...'),
-        error: (_, __) => const Text('Unknown Customer'),
-      ),
-      subtitle: Text(
-        '${payment.planType.name} - ${DateFormat('MMM d, y - h:mm a').format(payment.paymentDate)}',
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'UGX ${payment.amount.toStringAsFixed(0)}',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          ReceiptButton(payment: payment),
-        ],
-      ),
-    );
   }
 }

@@ -1,10 +1,9 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:phone_number/phone_number.dart';
 import 'package:truthy_wifi_manager/providers/customer_provider.dart'
     show customerProvider;
-
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
 import '../database/models/referral_stats.dart';
@@ -22,9 +21,12 @@ class AddCustomerScreen extends ConsumerStatefulWidget {
 class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _contactController = TextEditingController();
+  // final _contactController = TextEditingController();
+  String? _phoneNumber;
+  String? _isoCode;
   final _referralCodeController = TextEditingController();
   PlanType _selectedPlan = PlanType.monthly;
+  bool _isSaving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const Text(
+              'Please fill in the details to add a new customer.',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(
@@ -42,24 +49,37 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 border: OutlineInputBorder(),
               ),
               validator: (value) {
-                if (value?.isEmpty ?? true) {
-                  return 'Please enter a name';
+                if (value == null || value.isEmpty) {
+                  return 'Customer name is required';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _contactController,
+            // TextFormField(
+            //   controller: _contactController,
+            //   decoration: const InputDecoration(
+            //     labelText: 'Contact',
+            //     border: OutlineInputBorder(),
+            //   ),
+            //   validator: (value) {
+            //     if (value == null || value.isEmpty) {
+            //       return 'Contact information is required';
+            //     }
+            //     return null;
+            //   },
+            // ),
+            IntlPhoneField(
               decoration: const InputDecoration(
-                labelText: 'Contact',
+                labelText: 'Phone Number',
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (value?.isEmpty ?? true) {
-                  return 'Please enter contact info';
-                }
-                return null;
+              initialCountryCode: 'UG', // Default to Uganda, adjust as needed
+              onChanged: (phone) {
+                setState(() {
+                  _phoneNumber = phone.completeNumber; // E.164 format
+                  _isoCode = phone.countryISOCode; // e.g., 'UG', 'US'
+                });
               },
             ),
             const SizedBox(height: 16),
@@ -67,6 +87,8 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
               controller: _referralCodeController,
               decoration: const InputDecoration(
                 labelText: 'Referral Code (Optional)',
+                helperText:
+                    'Enter a referral code to reward the referrer with free subscription days',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -92,9 +114,20 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
               },
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _saveCustomer,
-              child: const Text('Save Customer'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: _isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isSaving ? null : _saveCustomer,
+                  child: _isSaving
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('Save Customer'),
+                ),
+              ],
             ),
           ],
         ),
@@ -102,21 +135,119 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
     );
   }
 
+  // void _saveCustomer() async {
+  //   if (_formKey.currentState?.validate() ?? false) {
+  //     final customer = Customer(
+  //       name: _nameController.text,
+  //       contact: _contactController.text,
+  //       isActive: true,
+  //       wifiName: Customer.generateWifiName(_nameController.text),
+  //       currentPassword: Customer.generate(
+  //         length: 6,
+  //         useSpecialChars: true,
+  //         useLowerCase: true,
+  //         useNumbers: true,
+  //       ),
+  //       subscriptionStart: DateTime.now(),
+  //       subscriptionEnd: _calculateEndDate(),
+  //       planType: _selectedPlan,
+  //       referredBy: _referralCodeController.text.isNotEmpty
+  //           ? await _getCustomerIdByReferralCode(_referralCodeController.text)
+  //           : null,
+  //     );
+
+  //     try {
+  //       await ref.read(databaseProvider).saveCustomer(customer);
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           const SnackBar(content: Text('Customer saved successfully')),
+  //         );
+  //         Navigator.pop(context);
+  //         ref.invalidate(activeCustomersProvider);
+  //         // Apply referral reward if applicable
+  //         if (customer.referredBy != null) {
+  //           await _applyReferralReward(customer.referredBy!, customer);
+  //         }
+  //       }
+
+  //       ref.invalidate(activeCustomersProvider);
+  //       ref.invalidate(databaseProvider);
+  //       ref.invalidate(customerProvider);
+  //       ref.invalidate(expiringSubscriptionsProvider);
+  //       ref.invalidate(notificationSchedulerProvider);
+  //     } catch (e, stackTrace) {
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(
+  //           context,
+  //           // Suggested code may be subject to a license. Learn more: ~LicenseLog:2261690070.
+  //         ).showSnackBar(
+  //           SnackBar(
+  //             content: SelectableText(
+  //               'Error saving customer: $e | $stackTrace',
+  //             ),
+  //             duration: Duration(minutes: 2),
+  //           ),
+  //         );
+  //       }
+  //     }
+  //   }
+  // }
   void _saveCustomer() async {
     if (_formKey.currentState?.validate() ?? false) {
+      if (_phoneNumber == null || _isoCode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a phone number')),
+        );
+        return;
+      }
+
+      setState(() {
+        _isSaving = true;
+      });
+
+      final phoneUtil = PhoneNumberUtil();
+      final isValid = await phoneUtil.validate(_phoneNumber!, _isoCode!);
+      if (!isValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Please enter a valid phone number for the selected country')),
+        );
+        setState(() {
+          _isSaving = false;
+        });
+        return;
+      }
+
+      final referralCode = _referralCodeController.text;
+      String? referrerId;
+      if (referralCode.isNotEmpty) {
+        referrerId = await _getCustomerIdByReferralCode(referralCode);
+        if (referrerId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Invalid referral code. Customer will be added without referral.'),
+            ),
+          );
+        }
+      }
+
       final customer = Customer(
         name: _nameController.text,
-        contact: _contactController.text,
+        contact: _phoneNumber!,
         isActive: true,
         wifiName: Customer.generateWifiName(_nameController.text),
-        currentPassword: _generatePassword(),
+        currentPassword: Customer.generate(
+          length: 6,
+          useSpecialChars: true,
+          useLowerCase: true,
+          useNumbers: true,
+        ),
         subscriptionStart: DateTime.now(),
         subscriptionEnd: _calculateEndDate(),
         planType: _selectedPlan,
-        referredBy: _referralCodeController.text.isNotEmpty
-            ? await _getCustomerIdByReferralCode(_referralCodeController.text)
-            : null,
-        
+        referredBy: referrerId,
       );
 
       try {
@@ -127,30 +258,30 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           );
           Navigator.pop(context);
           ref.invalidate(activeCustomersProvider);
-          // Apply referral reward if applicable
           if (customer.referredBy != null) {
             await _applyReferralReward(customer.referredBy!, customer);
           }
+          // Invalidate dependent providers to refresh data
+          ref.invalidate(activeCustomersProvider);
+          ref.invalidate(customerProvider);
+          ref.invalidate(expiringSubscriptionsProvider);
+          ref.invalidate(notificationSchedulerProvider);
         }
-
-        ref.invalidate(activeCustomersProvider);
-        ref.invalidate(databaseProvider);
-        ref.invalidate(customerProvider);
-        ref.invalidate(expiringSubscriptionsProvider);
-        ref.invalidate(notificationSchedulerProvider);
       } catch (e, stackTrace) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-            // Suggested code may be subject to a license. Learn more: ~LicenseLog:2261690070.
-          ).showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: SelectableText(
-                'Error saving customer: $e | $stackTrace',
-              ),
-              duration: Duration(minutes: 2),
+              content:
+                  SelectableText('Error saving customer: $e | $stackTrace'),
+              duration: const Duration(minutes: 2),
             ),
           );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
         }
       }
     }
@@ -254,11 +385,6 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
     } else {
       return const Duration(days: 1); // 1 day free for daily plan referral
     }
-  }
-
-  String _generatePassword() {
-    // Implement your password generation logic here
-    return 'temp-pass-${Random().nextInt(9999)}';
   }
 
   DateTime _calculateEndDate() {

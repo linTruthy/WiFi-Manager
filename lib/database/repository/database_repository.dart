@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:truthy_wifi_manager/database/models/billing_cycle.dart';
 import '../models/billing_cycle.dart';
 import '../models/customer.dart';
 import '../models/payment.dart';

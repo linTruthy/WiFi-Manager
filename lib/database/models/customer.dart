@@ -379,3 +379,6 @@ String _generateReferralCode() {
     List.generate(6, (index) => chars.codeUnitAt(random.nextInt(chars.length))),
   );
 }
+// extension StringExtension on String {
+//   dynamic let(Function(String) fn) => fn(this);
+// }

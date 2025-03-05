@@ -27,6 +27,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
   final _amountController = TextEditingController();
   DateTime _startDate = DateTime.now();
   late List<Plan> _plans; // Store the plans fetched from getPlans()
+  bool _isLoadingPlans = true;
 
   @override
   void initState() {
@@ -41,9 +42,13 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
 
   // Fetch plans asynchronously and update state
   Future<void> _loadPlans() async {
-    _plans = await getPlans(); // Fetch plans from Plan model
+    setState(() => _isLoadingPlans = true);
+    _plans = await getPlans();
     if (mounted) {
-      setState(() {}); // Trigger rebuild if needed
+      setState(() {
+        _isLoadingPlans = false;
+        _updateAmount();
+      });
     }
   }
 
@@ -65,8 +70,8 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (widget.customer ==
-                  null) // Show dropdown only if no customer provided
+              // Customer Selection
+              if (widget.customer == null)
                 customersAsync.when(
                   data: (customers) => DropdownButtonFormField<String>(
                     value: _selectedCustomerId,
@@ -74,16 +79,17 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                       labelText: 'Customer',
                       border: OutlineInputBorder(),
                     ),
-                    items: customers.map((customer) {
-                      return DropdownMenuItem(
-                        value: customer.id,
-                        child: Text(customer.name),
-                      );
-                    }).toList(),
+                    items: customers
+                        .map((customer) => DropdownMenuItem(
+                              value: customer.id,
+                              child: Text(customer.name),
+                            ))
+                        .toList(),
                     onChanged: (value) =>
                         setState(() => _selectedCustomerId = value),
                     validator: (value) =>
                         value == null ? 'Please select a customer' : null,
+                    focusNode: FocusNode(), // Ensure keyboard focus
                   ),
                   loading: () => const CircularProgressIndicator(),
                   error: (_, __) => const Text('Error loading customers'),
@@ -93,7 +99,10 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
                   child: Text(
                     'Customer: ${widget.customer!.name}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
+                    semanticsLabel:
+                        'Selected customer: ${widget.customer!.name}',
                   ),
                 ),
               const SizedBox(height: 16),
@@ -131,6 +140,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                     });
                   }
                 },
+                focusNode: FocusNode(),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -142,15 +152,16 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
+                  if (value == null || value.isEmpty)
                     return 'Please enter an amount';
-                  }
                   if (double.tryParse(value) == null ||
                       double.parse(value) <= 0) {
                     return 'Please enter a valid positive number';
                   }
                   return null;
                 },
+                textInputAction: TextInputAction.done,
+                focusNode: FocusNode(),
               ),
             ],
           ),
@@ -291,11 +302,11 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
         ref.invalidate(notificationSchedulerProvider);
 
         // Schedule notification for the updated subscription
-        await SubscriptionNotificationService.scheduleExpirationNotification(
-            customer);
+        await SubscriptionNotificationService
+            .scheduleSingleExpirationNotification(customer);
 
         // Show WiFi credentials dialog
-        if (mounted) {
+        if (mounted && (previousPayments.length <= 1 || !customer.isActive)) {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
@@ -304,6 +315,9 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                      'Use the following Credentials to setup Hotspot for ${customer.name}'),
+                  const SizedBox(height: 16),
                   SelectableText('WiFi Name: ${customer.wifiName}'),
                   const SizedBox(height: 8),
                   SelectableText('Password: ${customer.currentPassword}'),
@@ -316,6 +330,11 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
                 ),
               ],
             ),
+          );
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Payment recorded successfully')),
           );
         }
       } catch (e, stackTrace) {

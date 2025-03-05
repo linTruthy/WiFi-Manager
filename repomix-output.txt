@@ -1,4 +1,5 @@
-This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix. The content has been processed where comments have been removed, empty lines have been removed.
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where comments have been removed, empty lines have been removed, content has been compressed (code blocks are separated by ⋮---- delimiter).
 
 ================================================================
 File Summary
@@ -41,6 +42,7 @@ Notes:
 - Files matching default ignore patterns are excluded
 - Code comments have been removed from supported file types
 - Empty lines have been removed from all files
+- Content has been compressed - code blocks are separated by ⋮---- delimiter
 
 Additional Info:
 ----------------
@@ -69,6 +71,7 @@ providers/
   subscription_provider.dart
   syncing_provider.dart
 screens/
+  about_screen.dart
   add_customer_screen.dart
   billing_cycle_screen.dart
   customer_detail_screen.dart
@@ -78,6 +81,7 @@ screens/
   edit_customer_screen.dart
   expiring_subscriptions_screen.dart
   home_screen.dart
+  how_to_screen.dart
   inactive_customers_screen.dart
   login_screen.dart
   payments_screen.dart
@@ -512,6 +516,7 @@ File: database/repository/database_repository.dart
 ================
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:truthy_wifi_manager/database/models/billing_cycle.dart';
 import '../models/billing_cycle.dart';
 import '../models/customer.dart';
 import '../models/payment.dart';
@@ -924,6 +929,94 @@ final expiringSubscriptionsProvider = StreamProvider<List<Customer>>((ref) {
 File: providers/syncing_provider.dart
 ================
 
+
+================
+File: screens/about_screen.dart
+================
+import 'package:flutter/material.dart';
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('About Truthy Systems'),
+        backgroundColor: Colors.black.withOpacity(0.2),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Welcome to Truthy Systems',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Truthy Systems is your trusted partner in delivering reliable, high-speed WiFi solutions tailored for both individuals and businesses. Our mission is to empower users with seamless internet access while simplifying subscription management for providers through innovative technology.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Our Story',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Founded with a vision to bridge connectivity gaps, Truthy Systems combines cutting-edge software with exceptional customer service. Our WiFi Manager app is designed to streamline subscription tracking, payment processing, and customer engagement, ensuring uninterrupted service and satisfaction.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Key Features',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            _buildFeatureItem(context, 'Customer Management', 'Easily add, edit, and track customer subscriptions.'),
+            _buildFeatureItem(context, 'Billing & Payments', 'Monitor billing cycles and process payments effortlessly.'),
+            _buildFeatureItem(context, 'Referral Program', 'Earn rewards by inviting others to join Truthy WiFi.'),
+            _buildFeatureItem(context, 'Real-Time Insights', 'Access retention stats and revenue summaries.'),
+            const SizedBox(height: 24),
+            Text(
+              'Contact Us',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Email: truthysys@proton.me\nPhone: +256-783-009649',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  Widget _buildFeatureItem(BuildContext context, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                Text(description, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 ================
 File: screens/add_customer_screen.dart
@@ -2791,7 +2884,7 @@ class _DowntimeInputScreenState extends ConsumerState<DowntimeInputScreen> {
       batch.set(logRef, downtimeLog);
       await batch.commit();
       for (final customer in activeCustomers) {
-        await SubscriptionNotificationService.scheduleExpirationNotification(
+        await SubscriptionNotificationService.scheduleSingleExpirationNotification(
             customer);
         final message =
             'Your subscription has been extended by ${_downtimeDuration.inHours} hours due to downtime.';
@@ -3244,11 +3337,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/models/customer.dart';
 import '../providers/database_provider.dart';
+import '../providers/notification_schedule_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../services/ad_manager.dart';
+import '../services/app_preferences.dart';
 import '../services/subscription_widget_service.dart';
 import 'login_screen.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -3259,6 +3355,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late AnimationController _controller;
   final AdManager _adManager = AdManager();
   String _filter = 'This Month';
+  final GlobalKey _customersKey = GlobalKey();
+  final GlobalKey _paymentsKey = GlobalKey();
+  final GlobalKey _expiringKey = GlobalKey();
+  final GlobalKey _downtimeKey = GlobalKey();
+  final GlobalKey _billingKey = GlobalKey();
+  final GlobalKey _retentionKey = GlobalKey();
+  final GlobalKey _howToKey = GlobalKey();
+  final GlobalKey _settingsKey = GlobalKey();
   @override
   void initState() {
     super.initState();
@@ -3275,7 +3379,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.invalidate(expiringSubscriptionsProvider);
       ref.invalidate(activeCustomersProvider);
       ref.invalidate(paymentSummaryProvider);
+      ref.invalidate(scheduledNotificationsProvider);
     });
+    _checkAndShowTutorial();
+  }
+  Future<void> _checkAndShowTutorial() async {
+    final isFirstTime = await AppPreferences.isFirstTime();
+    if (isFirstTime && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showTutorial();
+      });
+    }
+  }
+  void _showTutorial() {
+    final tutorial = TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: Colors.black.withOpacity(0.8),
+      paddingFocus: 10,
+      opacityShadow: 0.8,
+      onFinish: () async {
+        await AppPreferences.setNotFirstTime();
+      },
+      onSkip: () {
+        AppPreferences.setNotFirstTime();
+        return true;
+      },
+    );
+    tutorial.show(context: context);
+  }
+  List<TargetFocus> _createTargets() {
+    return [
+      TargetFocus(
+        identify: "customers",
+        keyTarget: _customersKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Text(
+              "View and manage your active customers here.",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "payments",
+        keyTarget: _paymentsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Text(
+              "Track customer payments and billing cycles.",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "expiring",
+        keyTarget: _expiringKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Text(
+              "Monitor subscriptions nearing their end.",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+    ];
   }
   Future<void> _initializeAds() async {
     await _adManager.initializeBannerAd();
@@ -3385,12 +3564,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         Row(
           children: [
             Expanded(
-                child: _buildStatCard(
-                    'Active', activeCustomers, Colors.green, '/customers')),
+                child: _buildStatCard(_customersKey, 'Active', activeCustomers,
+                    Colors.green, '/customers')),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard('Expiring Today', expiringSubscriptions,
-                    Colors.red, '/expiring-subscriptions')),
+                child: _buildStatCard(
+                    _expiringKey,
+                    'Expiring Today',
+                    expiringSubscriptions,
+                    Colors.red,
+                    '/expiring-subscriptions')),
           ],
         ),
         const SizedBox(height: 12),
@@ -3398,24 +3581,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             Expanded(
                 child: _buildStatCard(
+                    _paymentsKey,
                     'Revenue',
                     ref.watch(paymentSummaryProvider),
                     Colors.blue,
                     '/payments')),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard('New This Week', activeCustomers,
-                    Colors.purple, '/customers')),
+                child: _buildStatCard(_retentionKey, 'New This Week',
+                    activeCustomers, Colors.purple, '/customers')),
           ],
         ),
       ],
     );
   }
   Widget _buildStatCard(
-      String title, AsyncValue data, Color color, String route) {
+      GlobalKey key, String title, AsyncValue data, Color color, String route) {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, route),
       child: Container(
+        key: key,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
@@ -3476,7 +3661,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             'Downtime', CupertinoIcons.clock, Colors.red, '/downtime-input'),
         _buildActionButton('Billing', CupertinoIcons.money_dollar, Colors.teal,
             '/billing-cycles'),
-            _buildActionButton('Retention', CupertinoIcons.chart_bar_fill, Colors.cyan, '/retention'),
+        _buildActionButton('Retention', CupertinoIcons.chart_bar_fill,
+            Colors.cyan, '/retention'),
       ],
     );
   }
@@ -3599,6 +3785,10 @@ class _GlassmorphicAppBar extends ConsumerWidget
                   ),
                 ),
                 const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.help),
+                  onPressed: () => Navigator.pushNamed(context, '/how-to'),
+                ),
                 Stack(
                   children: [
                     IconButton(
@@ -3821,6 +4011,134 @@ class _GlassmorphicActionCardState extends State<_GlassmorphicActionCard>
 }
 
 ================
+File: screens/how_to_screen.dart
+================
+import 'package:flutter/material.dart';
+class HowToScreen extends StatelessWidget {
+  const HowToScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('How To Use Truthy WiFi Manager'),
+        backgroundColor: Colors.black.withOpacity(0.2),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Getting Started',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Learn how to manage your WiFi subscriptions efficiently with Truthy WiFi Manager. Follow these steps to get the most out of the app.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 24),
+            _buildSection(
+              context,
+              'Sign In or Register',
+              [
+                'Open the app and sign in with your email or phone number.',
+                'New user? Tap "Create one" to register.',
+                'Use biometric authentication if enabled for faster access.',
+              ],
+            ),
+            _buildSection(
+              context,
+              'Add a Customer',
+              [
+                'From the Home screen, tap "Add Customer".',
+                'Enter the customer’s name, contact, and optional referral code.',
+                'Select a plan (Daily, Weekly, Monthly) and save.',
+                'WiFi credentials will be generated automatically.',
+              ],
+            ),
+            _buildSection(
+              context,
+              'Manage Payments',
+              [
+                'Go to "Payments" from the Home screen.',
+                'Tap the "+" icon to add a payment for a customer.',
+                'View payment history and generate receipts.',
+              ],
+            ),
+            _buildSection(
+              context,
+              'Handle Downtime',
+              [
+                'Navigate to "Downtime" from the Home screen.',
+                'Enter the downtime duration in hours and confirm.',
+                'All active subscriptions will be extended automatically.',
+              ],
+            ),
+            _buildSection(
+              context,
+              'Track Referrals',
+              [
+                'View a customer’s referral code in their details.',
+                'Share it to earn free subscription days.',
+                'Check referral stats from the customer detail screen.',
+              ],
+            ),
+            _buildSection(
+              context,
+              'Monitor Insights',
+              [
+                'Visit "Retention" for churn and retention rates.',
+                'Check "Billing Cycles" for income and profit summaries.',
+                'Review expiring subscriptions under "Expiring".',
+              ],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Need Help?',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Contact our 24/7 support at truthysys@proton.me or +256-783-009649.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  Widget _buildSection(BuildContext context, String title, List<String> steps) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 8),
+        ...steps.asMap().entries.map((entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${entry.key + 1}. ', style: Theme.of(context).textTheme.bodyMedium),
+                  Expanded(
+                    child: Text(entry.value, style: Theme.of(context).textTheme.bodyMedium),
+                  ),
+                ],
+              ),
+            )),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+================
 File: screens/inactive_customers_screen.dart
 ================
 import 'package:flutter/material.dart';
@@ -3906,7 +4224,7 @@ class InactiveCustomersScreen extends ConsumerWidget {
       );
       final message =
           'Your subscription has been reactivated. Thank you for choosing our services!';
-      await SubscriptionNotificationService.scheduleExpirationNotification(
+      await SubscriptionNotificationService.scheduleSingleExpirationNotification(
           customer);
       print('Notification sent to ${customer.name}: $message');
     }
@@ -3928,7 +4246,7 @@ class InactiveCustomersScreen extends ConsumerWidget {
       );
       final message =
           'Your subscription has been reactivated with a new payment. Thank you!';
-      await SubscriptionNotificationService.scheduleExpirationNotification(
+      await SubscriptionNotificationService.scheduleSingleExpirationNotification(
           customer);
       print('Notification sent to ${customer.name}: $message');
     }
@@ -5215,15 +5533,11 @@ class SettingsScreen extends ConsumerStatefulWidget {
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late double _daysBeforeDaily;
-  late double _daysBeforeWeekly;
-  late double _daysBeforeMonthly;
-  late bool _priorityUrgent;
-  late bool _enableSnooze;
   late double _dailyPrice;
   late double _weeklyPrice;
   late double _monthlyPrice;
   bool _isSaving = false;
+  late Map<String, dynamic> _notificationSettings;
   @override
   void initState() {
     super.initState();
@@ -5233,16 +5547,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await SubscriptionNotificationService.loadSettings();
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _daysBeforeDaily = SubscriptionNotificationService
-          .reminderSettings['daysBeforeDaily'] as double;
-      _daysBeforeWeekly = SubscriptionNotificationService
-          .reminderSettings['daysBeforeWeekly'] as double;
-      _daysBeforeMonthly = SubscriptionNotificationService
-          .reminderSettings['daysBeforeMonthly'] as double;
-      _priorityUrgent = SubscriptionNotificationService
-          .reminderSettings['priorityUrgent'] as bool;
-      _enableSnooze = SubscriptionNotificationService
-          .reminderSettings['enableSnooze'] as bool;
+      _notificationSettings =
+          Map.from(SubscriptionNotificationService.reminderSettings);
       _dailyPrice = prefs.getDouble('dailyPrice') ?? 2000.0;
       _weeklyPrice = prefs.getDouble('weeklyPrice') ?? 10000.0;
       _monthlyPrice = prefs.getDouble('monthlyPrice') ?? 35000.0;
@@ -5264,6 +5570,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildPriceSettingsCard(),
             const SizedBox(height: 24),
             _buildSaveButton(),
+            const SizedBox(height: 24),
+            IconButton(
+              icon: const Icon(Icons.info),
+              onPressed: () => Navigator.pushNamed(context, '/about'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.help),
+              onPressed: () => Navigator.pushNamed(context, '/how-to'),
+            ),
           ],
         ),
       ),
@@ -5282,50 +5597,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            _buildSliderWithLabel(
-              label: 'Daily Expiration',
-              value: _daysBeforeDaily,
-              min: 0.1,
-              max: 1.0,
-              divisions: 9,
-              unit: 'hours',
-              onChanged: (value) => setState(() => _daysBeforeDaily = value),
-            ),
-            _buildSliderWithLabel(
-              label: 'Weekly Expiration',
-              value: _daysBeforeWeekly,
-              min: 0.5,
-              max: 2.0,
-              divisions: 8,
-              unit: 'days',
-              onChanged: (value) => setState(() => _daysBeforeWeekly = value),
-            ),
-            _buildSliderWithLabel(
-              label: 'Monthly Expiration',
-              value: _daysBeforeMonthly,
-              min: 1.0,
-              max: 7.0,
-              divisions: 12,
-              unit: 'days',
-              onChanged: (value) => setState(() => _daysBeforeMonthly = value),
-            ),
-            const Divider(height: 24),
-            CheckboxListTile(
-              title: const Text(
-                  'Prioritize urgent notifications (expiring today)'),
-              value: _priorityUrgent,
-              onChanged: (value) =>
-                  setState(() => _priorityUrgent = value ?? true),
-            ),
-            CheckboxListTile(
-              title: const Text('Enable snooze option'),
-              value: _enableSnooze,
-              onChanged: (value) =>
-                  setState(() => _enableSnooze = value ?? true),
-            ),
+            _buildSlider('Daily Plan (days before)', 'daysBeforeDaily'),
+            _buildSlider('Weekly Plan (days before)', 'daysBeforeWeekly'),
+            _buildSlider('Monthly Plan (days before)', 'daysBeforeMonthly'),
           ],
         ),
       ),
+    );
+  }
+  Widget _buildSlider(String label, String key) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 16)),
+        Slider(
+          value: _notificationSettings[key].toDouble(),
+          min: 0,
+          max: 7,
+          divisions: 7,
+          label: _notificationSettings[key].toString(),
+          onChanged: (value) {
+            setState(() {
+              _notificationSettings[key] = value.round();
+            });
+          },
+        ),
+      ],
     );
   }
   Widget _buildPriceSettingsCard() {
@@ -5414,17 +5711,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveSettings() async {
     setState(() => _isSaving = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble('dailyPrice', _dailyPrice);
-      await prefs.setDouble('weeklyPrice', _weeklyPrice);
-      await prefs.setDouble('monthlyPrice', _monthlyPrice);
-      await SubscriptionNotificationService.saveSettings({
-        'daysBeforeDaily': _daysBeforeDaily,
-        'daysBeforeWeekly': _daysBeforeWeekly,
-        'daysBeforeMonthly': _daysBeforeMonthly,
-        'priorityUrgent': _priorityUrgent,
-        'enableSnooze': _enableSnooze,
-      });
+      await SubscriptionNotificationService.saveSettings(_notificationSettings);
       final database = ref.read(databaseProvider);
       await _updatePlanPrices(database);
       final snapshot = await database.firestore
@@ -6066,22 +6353,24 @@ File: services/notification_scheduler.dart
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:logger/logger.dart';
 import '../database/models/customer.dart';
-import '../services/subscription_notification_service.dart';
+import 'subscription_notification_service.dart';
 class NotificationScheduler {
+  static final NotificationScheduler _instance = NotificationScheduler._internal();
+  factory NotificationScheduler() => _instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Timer? _schedulingTimer;
-  NotificationScheduler() {
-    _scheduleNotificationCheck();
-    _schedulingTimer = Timer.periodic(
-        const Duration(hours: 6), (_) => _scheduleNotificationCheck());
+  Timer? _timer;
+ static final Logger _logger = Logger();
+ NotificationScheduler._internal() {
+    _startPeriodicScheduling();
   }
   String _getUserCollectionPath(String collection) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('User not authenticated');
     return 'users/${user.uid}/$collection';
   }
-  Future<void> _scheduleNotificationCheck() async {
+  Future<void> _scheduleNotifications() async {
     try {
       final snapshot = await _firestore
           .collection(_getUserCollectionPath('customers'))
@@ -6090,14 +6379,19 @@ class NotificationScheduler {
       final customers = snapshot.docs
           .map((doc) => Customer.fromJson(doc.id, doc.data()))
           .toList();
-      await SubscriptionNotificationService.scheduleExpirationNotifications(
-          customers);
+ _logger.i('in scheduler...');
+      await SubscriptionNotificationService.scheduleExpirationNotifications(customers);
+      await SubscriptionNotificationService.clearExpiredNotifications();
     } catch (e) {
       print('Error scheduling notifications: $e');
     }
   }
+  void _startPeriodicScheduling() {
+    _scheduleNotifications();
+    _timer = Timer.periodic(const Duration(hours: 6), (_) => _scheduleNotifications());
+  }
   void dispose() {
-    _schedulingTimer?.cancel();
+    _timer?.cancel();
   }
 }
 
@@ -6500,69 +6794,55 @@ File: services/subscription_notification_service.dart
 ================
 import 'dart:convert';
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:permission_handler/permission_handler.dart';
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../main.dart';
-import '../screens/customer_detail_screen.dart';
+import 'package:permission_handler/permission_handler.dart';
 class SubscriptionNotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
-  static const String channelId = 'subscription_notifications';
-  static const String channelName = 'Subscription Notifications';
-  static const String channelDescription =
+  static final Logger _logger = Logger();
+  static const String _channelId = 'subscription_notifications';
+  static const String _channelName = 'Subscription Notifications';
+  static const String _channelDescription =
       'Notifications for expiring subscriptions';
-  static const _scheduledNotificationsKey = 'scheduled_notifications';
-  static final _logger = Logger();
-  static const String _notificationSettingsKey = 'notification_settings';
+  static const String _scheduledNotificationsKey = 'scheduled_notifications';
+  static const int _maxRetries = 3;
   static Map<String, dynamic> reminderSettings = {
-    'daysBeforeDaily': 0.1,
-    'daysBeforeWeekly': 1.5,
-    'daysBeforeMonthly': 3.0,
-    'priorityUrgent': true,
-    'enableSnooze': true,
+    'daysBeforeDaily': 0,
+    'daysBeforeWeekly': 1,
+    'daysBeforeMonthly': 3,
   };
-  static const MethodChannel _androidChannel =
-      MethodChannel('com.truthysystems.wifi/notification_scheduler');
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static String _getUserCollectionPath(String collection) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('User not authenticated');
-    return 'users/${user.uid}/$collection';
-  }
-  static Future<void> _scheduleOnAndroid(
-    tz.TZDateTime time, String customerId) async {
-  if (Platform.isAndroid) {
-    final timeInMillis = time.millisecondsSinceEpoch;
-    await _androidChannel.invokeMethod('scheduleExactNotification', {
-      'timeInMillis': timeInMillis,
-      'customerId': customerId,
-    });
-  }
-}
+  static const String _detailedNotificationsKey =
+      'detailed_scheduled_notifications';
   static Future<void> initialize() async {
-    await _requestPermissions();
-    await _initializeNotifications();
-    _notifications.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
-      ),
-      onDidReceiveNotificationResponse: (NotificationResponse response) async {
-        final payload = response.payload;
-        if (payload != null) {
-          await _handleNotificationResponse(payload);
+    _requestPermissions();
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings();
+    const settings =
+        InitializationSettings(android: androidSettings, iOS: iosSettings);
+    await _notifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (response) async {
+        if (response.payload != null) {
+          await _handleNotificationTap(response.payload!);
         }
       },
     );
+    const androidChannel = AndroidNotificationChannel(
+      _channelId,
+      _channelName,
+      description: _channelDescription,
+      importance: Importance.max,
+    );
+    await _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(androidChannel);
   }
   static Future<void> _requestPermissions() async {
     if (Platform.isAndroid) {
@@ -6580,75 +6860,116 @@ class SubscriptionNotificationService {
       }
     }
   }
-  static Future<void> scheduleAllNotifications() async {
+  static Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final settingsString = prefs.getString('notification_settings');
+    if (settingsString != null) {
+      reminderSettings = json.decode(settingsString);
+    }
+  }
+  static Future<void> saveSettings(Map<String, dynamic> settings) async {
+    reminderSettings = settings;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('notification_settings', json.encode(settings));
+  }
+  static int _getDaysBefore(PlanType planType) {
+    switch (planType) {
+      case PlanType.daily:
+        return reminderSettings['daysBeforeDaily'] as int? ?? 0;
+      case PlanType.weekly:
+        return reminderSettings['daysBeforeWeekly'] as int? ?? 1;
+      case PlanType.monthly:
+        return reminderSettings['daysBeforeMonthly'] as int? ?? 3;
+    }
+  }
+  static Future<void> scheduleExpirationNotifications(
+      List<Customer> customers) async {
+    final now = tz.TZDateTime.now(tz.local);
+    final futures = <Future<void>>[];
+    _logger.i('scheduling...');
+    for (final customer in customers) {
+      final notificationTime = _calculateNotificationTime(customer);
+      if (await _isNotificationScheduled(customer.id)) continue;
+      if (notificationTime.isBefore(now)) {
+        await _showImmediateNotification(customer);
+        continue;
+      }
+      futures.add(_scheduleNotificationWithRetry(customer, notificationTime));
+    }
     try {
-      final snapshot = await _firestore
-          .collection(_getUserCollectionPath('customers'))
-          .where('isActive', isEqualTo: true)
-          .get();
-      final customers = snapshot.docs
-          .map((doc) => Customer.fromJson(doc.id, doc.data()))
-          .toList();
-      await scheduleExpirationNotifications(customers);
-      print('All notifications scheduled');
-    } on PlatformException catch (e) {
-      print("Failed to schedule all notifications: ${e.message}");
+      await Future.wait(futures);
+      _logger.i('Successfully scheduled ${futures.length} notifications');
+    } catch (e) {
+      _logger.e('Failed to schedule notifications: $e');
+      rethrow;
     }
   }
-  static Future<void> _initializeNotifications() async {
-    const androidChannel = AndroidNotificationChannel(
-      channelId,
-      channelName,
-      description: channelDescription,
-      importance: Importance.max,
-    );
-    final platform = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await platform?.createNotificationChannel(androidChannel);
-    const initializationSettings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      iOS: DarwinInitializationSettings(),
-    );
-    await _notifications.initialize(initializationSettings);
-  }
- static Future<void> scheduleExpirationNotifications(
-    List<Customer> customers) async {
-  final now = tz.TZDateTime.now(tz.local);
-  final notificationDetailsList = <Future<void>>[];
-  final scheduledCustomers = <Customer>[];
-  final scheduledTimes = <tz.TZDateTime>[];
-  for (final customer in customers) {
-    if (await _isNotificationScheduled(customer.id)) continue;
-    final notificationTime = _calculateNotificationTime(customer);
-    if (notificationTime.isBefore(now)) {
-      await _scheduleImmediateNotification(customer);
-      await _scheduleOnAndroid(notificationTime, customer.id);
-      continue;
+  static Future<void> _scheduleNotificationWithRetry(
+      Customer customer, tz.TZDateTime notificationTime,
+      [int retryCount = 0]) async {
+    try {
+      final details = _createNotificationDetails(customer);
+      await _notifications.zonedSchedule(
+        customer.id.hashCode,
+        'Subscription Expiring',
+        _generateMessage(customer),
+        notificationTime,
+        details,
+        androidScheduleMode:
+            await _getScheduleMode(),
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: customer.id,
+      );
+      await _saveScheduledNotification(customer, notificationTime);
+      _logger.i(
+          'Scheduled notification for ${customer.name} at $notificationTime');
+    } catch (e) {
+      if (retryCount < _maxRetries) {
+        final delay = Duration(seconds: 1 << retryCount);
+        _logger.w(
+            'Retry ${retryCount + 1}/$_maxRetries for ${customer.id} after $e');
+        await Future.delayed(delay);
+        await _scheduleNotificationWithRetry(
+            customer, notificationTime, retryCount + 1);
+      } else {
+        _logger.e(
+            'Failed to schedule notification for ${customer.id} after $_maxRetries retries: $e');
+        throw NotificationSchedulingException(
+            'Max retries exceeded for ${customer.id}: $e');
+      }
     }
-    final importance = _getImportance(customer);
-    final notificationDetails = _createNotificationDetails(importance);
-    notificationDetailsList.add(_notifications.zonedSchedule(
+  }
+  static Future<void> _showImmediateNotification(Customer customer) async {
+    final details = _createNotificationDetails(customer, isUrgent: true);
+    await _notifications.show(
       customer.id.hashCode,
-      'Subscription Expiring',
+      'Subscription Expiring Soon',
       _generateMessage(customer),
-      notificationTime,
-      notificationDetails,
-      androidScheduleMode: await _getScheduleMode(),
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      payload: customer.id.toString(),
-    ));
-    scheduledCustomers.add(customer);
-    scheduledTimes.add(notificationTime);
+      details,
+      payload: customer.id,
+    );
+    _logger.i('Showed immediate notification for ${customer.name}');
   }
-  try {
-    await Future.wait(notificationDetailsList);
-    await _saveScheduledNotifications(scheduledCustomers, scheduledTimes);
-  } catch (e) {
-    _logger.log(Level.error, 'Failed to schedule multiple notifications: $e');
-    await _retryScheduleNotifications(customers, 0);
+  static NotificationDetails _createNotificationDetails(Customer customer,
+      {bool isUrgent = false}) {
+    final importance =
+        isUrgent || customer.subscriptionEnd.isBefore(DateTime.now())
+            ? Importance.max
+            : Importance.defaultImportance;
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: _channelDescription,
+        importance: importance,
+        priority: importance == Importance.max
+            ? Priority.high
+            : Priority.defaultPriority,
+        showWhen: true,
+      ),
+    );
   }
-}
   static Future<AndroidScheduleMode> _getScheduleMode() async {
     if (Platform.isAndroid) {
       final alarmStatus = await Permission.scheduleExactAlarm.status;
@@ -6658,396 +6979,113 @@ class SubscriptionNotificationService {
     }
     return AndroidScheduleMode.inexactAllowWhileIdle;
   }
-  static Future<void> _retryScheduleNotifications(
-      List<Customer> customers, int retryCount) async {
-    if (retryCount >= 3) {
-      _logger.log(
-          Level.error, 'Max retries reached for scheduling notifications');
-      return;
-    }
-    await Future.delayed(Duration(seconds: 1 << retryCount));
-    try {
-      await scheduleExpirationNotifications(customers);
-    } catch (e) {
-      await _retryScheduleNotifications(customers, retryCount + 1);
-    }
-  }
-  static Importance _getImportance(Customer customer) {
-    final daysLeft = customer.subscriptionEnd.difference(DateTime.now()).inDays;
-    return daysLeft <= 0 && reminderSettings['priorityUrgent'] == true
-        ? Importance.max
-        : Importance.defaultImportance;
-  }
-  static NotificationDetails _createNotificationDetails(Importance importance) {
-    return NotificationDetails(
-      android: AndroidNotificationDetails(
-        channelId,
-        channelName,
-        channelDescription: channelDescription,
-        importance: importance,
-        priority: importance == Importance.max
-            ? Priority.high
-            : Priority.defaultPriority,
-        fullScreenIntent: importance == Importance.max,
-        showWhen: true,
-      ),
-    );
-  }
-  static Future<void> _scheduleImmediateNotification(Customer customer) async {
-    final notificationDetails = _createNotificationDetails(Importance.max);
-    try {
-      await _notifications.show(
-        customer.id.hashCode,
-        'Subscription Expiring Soon',
-        _generateMessage(customer),
-        notificationDetails,
-        payload: customer.id,
-      );
-    } catch (e) {
-      _logger.log(Level.error,
-          'Failed to show immediate notification for customer: ${customer.id}, Error: $e');
-    }
-  }
-  static Future<void> _saveScheduledNotifications(
-      List<Customer> customers, List<tz.TZDateTime> times) async {
-    final prefs = await SharedPreferences.getInstance();
-    final notifications = <String, dynamic>{};
-    final detailedNotifications = <String, dynamic>{};
-    for (int i = 0; i < customers.length; i++) {
-      final customer = customers[i];
-      final time = times[i];
-      final notificationDetails = {
-        'customerId': customer.id,
-        'customerName': customer.name,
-        'contact': customer.contact,
-        'wifiName': customer.wifiName,
-        'planType': customer.planType.toString().split('.').last,
-        'subscriptionStart': customer.subscriptionStart.toIso8601String(),
-        'subscriptionEnd': customer.subscriptionEnd.toIso8601String(),
-        'notificationTime': time.toIso8601String(),
-        'message': _generateMessage(customer),
-        'status': 'scheduled',
-        'isActive': customer.isActive,
-        'snoozeCount': 0,
-      };
-      notifications[customer.id.toString()] = time.toIso8601String();
-      detailedNotifications[customer.id.toString()] = notificationDetails;
-    }
-    await prefs.setString(
-        _scheduledNotificationsKey, json.encode(notifications));
-    await prefs.setString(
-        'detailed_scheduled_notifications', json.encode(detailedNotifications));
-  }
-  static Future<List<Map<String, dynamic>>> getScheduledNotifications() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final detailedNotificationsString =
-          prefs.getString('detailed_scheduled_notifications');
-      if (detailedNotificationsString == null) return [];
-      final Map<String, dynamic> decoded =
-          json.decode(detailedNotificationsString);
-      return decoded.values.map<Map<String, dynamic>>((notification) {
-        return {
-          'customerId':
-              int.tryParse(notification['customerId'].toString()) ?? 0,
-          'customerName': notification['customerName'],
-          'contact': notification['contact'],
-          'wifiName': notification['wifiName'],
-          'planType': notification['planType'],
-          'subscriptionStart':
-              DateTime.parse(notification['subscriptionStart']),
-          'subscriptionEnd': DateTime.parse(notification['subscriptionEnd']),
-          'notificationTime': DateTime.parse(notification['notificationTime']),
-          'message': notification['message'],
-          'status': notification['status'],
-          'isActive': notification['isActive'] ?? false,
-          'snoozeCount': notification['snoozeCount'] ?? 0,
-        };
-      }).toList();
-    } catch (e) {
-      _logger.log(
-          Level.error, 'Failed to get detailed scheduled notifications: $e');
-      throw NotificationStorageException('Failed to get notifications: $e');
-    }
-  }
-  static Future<void> loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final settingsString = prefs.getString(_notificationSettingsKey);
-    if (settingsString != null) {
-      reminderSettings = json.decode(settingsString);
-    }
-  }
-  static Future<void> saveSettings(Map<String, dynamic> settings) async {
-    reminderSettings = settings;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_notificationSettingsKey, json.encode(settings));
-  }
   static tz.TZDateTime _calculateNotificationTime(Customer customer) {
-    final end = tz.TZDateTime.from(customer.subscriptionEnd, tz.local);
+    final endTime = tz.TZDateTime.from(customer.subscriptionEnd, tz.local);
     final daysBefore = _getDaysBefore(customer.planType);
-    return end.subtract(Duration(days: daysBefore.toInt()));
-  }
-  static double _getDaysBefore(PlanType planType) {
-    switch (planType) {
-      case PlanType.daily:
-        return reminderSettings['daysBeforeDaily'] as double;
-      case PlanType.weekly:
-        return reminderSettings['daysBeforeWeekly'] as double;
-      case PlanType.monthly:
-        return reminderSettings['daysBeforeMonthly'] as double;
-    }
+    return endTime.subtract(Duration(days: daysBefore));
   }
   static String _generateMessage(Customer customer) {
-    final now = DateTime.now();
-    final end = customer.subscriptionEnd;
-    final duration = end.difference(now);
+    final duration = customer.subscriptionEnd.difference(DateTime.now());
     final days = duration.inDays;
     final hours = duration.inHours % 24;
-    final minutes = duration.inMinutes % 60;
-    String timeDescription;
-    if (days > 0) {
-      timeDescription =
-          '$days day${days != 1 ? 's' : ''}, $hours hour${hours != 1 ? 's' : ''}, $minutes minute${minutes != 1 ? 's' : ''} left';
-    } else if (hours > 0) {
-      timeDescription =
-          '$hours hour${hours != 1 ? 's' : ''}, $minutes minute${minutes != 1 ? 's' : ''} left';
-    } else {
-      timeDescription = '$minutes minute${minutes != 1 ? 's' : ''} left';
-    }
-    return '${customer.name}\'s ${customer.planType.name} plan expires in $timeDescription';
-  }
-  static Future<void> _handleNotificationResponse(String payload) async {
-    final context = navigatorKey.currentContext;
-    if (context == null) return;
-    final customerId = payload;
-    final customer = await _getCustomerById(customerId);
-    if (customer == null) return;
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Subscription Reminder'),
-        content: Text(_generateMessage(customer)),
-        actions: [
-          if (reminderSettings['enableSnooze'] == true)
-            TextButton(
-              onPressed: () {
-                _snoozeNotification(customer);
-                Navigator.pop(context, true);
-              },
-              child: const Text('Snooze (30 min)'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Dismiss'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context, true);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      CustomerDetailScreen(customer: customer),
-                ),
-              );
-            },
-            child: const Text('View Details'),
-          ),
-        ],
-      ),
-    );
-  }
-  static Future<void> _snoozeNotification(Customer customer) async {
-    final prefs = await SharedPreferences.getInstance();
-    final detailedNotificationsString =
-        prefs.getString('detailed_scheduled_notifications') ?? '{}';
-    final detailedNotifications =
-        json.decode(detailedNotificationsString) as Map<String, dynamic>;
-    final notification = detailedNotifications[customer.id];
-    if (notification != null) {
-      final snoozeCount = (notification['snoozeCount'] as int) + 1;
-      if (snoozeCount <= 3) {
-        final newTime = tz.TZDateTime.now(tz.local)
-            .add(Duration(minutes: 30 * snoozeCount));
-        notification['notificationTime'] = newTime.toIso8601String();
-        notification['snoozeCount'] = snoozeCount;
-        await _notifications.cancel(customer.id.hashCode);
-        await scheduleExpirationNotification(customer);
-        await prefs.setString('detailed_scheduled_notifications',
-            json.encode(detailedNotifications));
-      }
-    }
-  }
-  static Future<Customer?> _getCustomerById(String customerId) async {
-    final doc = await _firestore
-        .collection(_getUserCollectionPath('customers'))
-        .doc(customerId)
-        .get();
-    return doc.exists ? Customer.fromJson(doc.id, doc.data()!) : null;
-  }
-  static Future<void> scheduleExpirationNotification(Customer customer,
-      {int retryCount = 0}) async {
-    try {
-      if (await _isNotificationScheduled(customer.id)) return;
-      final notificationTime = _calculateNotificationTime(customer);
-      final now = tz.TZDateTime.now(tz.local);
-      if (notificationTime.isBefore(now)) {
-        await _scheduleImmediateNotification(customer);
-        await _scheduleOnAndroid(notificationTime, customer.id);
-        return;
-      }
-      final importance =
-          customer.subscriptionEnd.difference(DateTime.now()).inDays <= 0
-              ? Importance.max
-              : Importance.defaultImportance;
-      final notificationDetails = _createNotificationDetails(importance);
-      await _notifications.zonedSchedule(
-        customer.id.hashCode,
-        'Subscription Expiring',
-        _generateMessage(customer),
-        notificationTime,
-        notificationDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: customer.id.toString(),
-      );
-      await _saveScheduledNotification(customer, notificationTime);
-      await _markNotificationScheduled(customer.id, notificationTime);
-    } catch (e) {
-      if (retryCount < 3) {
-        await Future.delayed(
-            Duration(seconds: 1 << retryCount));
-        await scheduleExpirationNotification(customer,
-            retryCount: retryCount + 1);
-      } else {
-        _logger.log(Level.error,
-            'Failed to schedule notification after retries for customer: ${customer.id}, Error: $e');
-      }
-    }
+    return days > 0
+        ? '${customer.name}’s ${customer.planType.name} plan expires in $days day${days > 1 ? 's' : ''}'
+        : '${customer.name}’s ${customer.planType.name} plan expires in $hours hour${hours > 1 ? 's' : ''}';
   }
   static Future<void> _saveScheduledNotification(
-    Customer customer,
-    tz.TZDateTime notificationTime,
-  ) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final scheduledNotificationsString =
-          prefs.getString('scheduled_notifications') ?? '{}';
-      final notifications =
-          json.decode(scheduledNotificationsString) as Map<String, dynamic>;
-      final notificationDetails = {
-        'customerId': customer.id.toString(),
-        'customerName': customer.name,
-        'contact': customer.contact,
-        'wifiName': customer.wifiName,
-        'planType': customer.planType.toString().split('.').last,
-        'subscriptionStart': customer.subscriptionStart.toIso8601String(),
-        'subscriptionEnd': customer.subscriptionEnd.toIso8601String(),
-        'notificationTime': notificationTime.toIso8601String(),
-        'message': _generateMessage(customer),
-        'status': 'scheduled',
-        'isActive': customer.isActive,
-      };
-      notifications[customer.id.toString()] =
-          notificationTime.toIso8601String();
-      await prefs.setString(
-        'scheduled_notifications',
-        json.encode(notifications),
-      );
-      final detailedNotificationsString =
-          prefs.getString('detailed_scheduled_notifications') ?? '{}';
-      final detailedNotifications =
-          json.decode(detailedNotificationsString) as Map<String, dynamic>;
-      detailedNotifications[customer.id.toString()] = notificationDetails;
-      await prefs.setString(
-        'detailed_scheduled_notifications',
-        json.encode(detailedNotifications),
-      );
-      _logger.log(
-        Level.info,
-        'Saved notification for customer: ${customer.id}',
-      );
-    } catch (e) {
-      _logger.log(Level.error, 'Failed to save notification: $e');
-      throw NotificationStorageException('Failed to save notification: $e');
-    }
+      Customer customer, tz.TZDateTime notificationTime) async {
+    final prefs = await SharedPreferences.getInstance();
+    final notifications =
+        prefs.getString(_detailedNotificationsKey)?.let(json.decode) ??
+            <String, dynamic>{};
+    notifications[customer.id] = {
+      'customerId': customer.id,
+      'customerName': customer.name,
+      'planType': customer.planType.name,
+      'subscriptionEnd': customer.subscriptionEnd.toIso8601String(),
+      'notificationTime': notificationTime.toIso8601String(),
+      'message':
+          'Reminder: ${customer.name}\'s ${customer.planType.name} plan ends soon',
+      'status': 'scheduled',
+    };
+    await prefs.setString(
+        _detailedNotificationsKey, json.encode(notifications));
   }
   static Future<bool> _isNotificationScheduled(String customerId) async {
     final prefs = await SharedPreferences.getInstance();
-    final scheduledNotifications = prefs.getString(_scheduledNotificationsKey);
-    if (scheduledNotifications == null) return false;
     final notifications =
-        json.decode(scheduledNotifications) as Map<String, dynamic>;
-    final scheduledTime = notifications[customerId];
-    if (scheduledTime == null) return false;
-    final notificationTime = DateTime.parse(scheduledTime);
-    return notificationTime.isAfter(DateTime.now());
+        prefs.getString(_scheduledNotificationsKey)?.let(json.decode) ??
+            <String, dynamic>{};
+    final scheduled = notifications[customerId];
+    if (scheduled == null) return false;
+    final time = DateTime.parse(scheduled['time']);
+    return time.isAfter(DateTime.now());
   }
-  static Future<void> _markNotificationScheduled(
-    String customerId,
-    tz.TZDateTime notificationTime,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final scheduledNotifications = prefs.getString(_scheduledNotificationsKey);
-    final notifications = scheduledNotifications != null
-        ? json.decode(scheduledNotifications) as Map<String, dynamic>
-        : <String, dynamic>{};
-    notifications[customerId] = notificationTime.toString();
-    await prefs.setString(
-      _scheduledNotificationsKey,
-      json.encode(notifications),
-    );
+  static Future<void> _handleNotificationTap(String customerId) async {
+    _logger.i('Notification tapped for customer: $customerId');
   }
   static Future<void> clearExpiredNotifications() async {
     final prefs = await SharedPreferences.getInstance();
-    final scheduledNotifications = prefs.getString(_scheduledNotificationsKey);
-    if (scheduledNotifications == null) return;
     final notifications =
-        json.decode(scheduledNotifications) as Map<String, dynamic>;
-    notifications.removeWhere((_, timeStr) {
-      final time = DateTime.parse(timeStr);
-      return time.isBefore(DateTime.now());
-    });
+        prefs.getString(_scheduledNotificationsKey)?.let(json.decode) ??
+            <String, dynamic>{};
+    notifications.removeWhere(
+        (_, data) => DateTime.parse(data['time']).isBefore(DateTime.now()));
     await prefs.setString(
-      _scheduledNotificationsKey,
-      json.encode(notifications),
-    );
+        _scheduledNotificationsKey, json.encode(notifications));
   }
-  static Future<void> updateNotificationStatus(
-    int customerId,
-    String newStatus,
-  ) async {
+  static Future<void> scheduleSingleExpirationNotification(
+      Customer customer) async {
+    await _notifications.cancel(customer.id.hashCode);
+    await scheduleExpirationNotifications([customer]);
+  }
+  static Future<List<Map<String, dynamic>>> getScheduledNotifications() async {
+    _logger.i('Fetching scheduled notifications');
+    final prefs = await SharedPreferences.getInstance();
+    final notificationsString = prefs.getString(_detailedNotificationsKey);
+    if (notificationsString == null) {
+      _logger.w(
+          'No notifications found in SharedPreferences');
+      return [];
+    }
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final detailedNotificationsString = prefs.getString(
-        'detailed_scheduled_notifications',
-      );
-      if (detailedNotificationsString == null) return;
-      final Map<String, dynamic> notifications = json.decode(
-        detailedNotificationsString,
-      );
-      if (notifications.containsKey(customerId.toString())) {
-        notifications[customerId.toString()]['status'] = newStatus;
-        await prefs.setString(
-          'detailed_scheduled_notifications',
-          json.encode(notifications),
-        );
-        _logger.log(
-          Level.info,
-          'Updated notification status for customer: $customerId',
-        );
-      }
+      final notifications =
+          json.decode(notificationsString) as Map<String, dynamic>;
+      final now = DateTime.now();
+      final activeNotifications = notifications.entries
+          .where((entry) =>
+              DateTime.parse(entry.value['notificationTime']).isAfter(now))
+          .map((entry) => entry.value)
+          .toList();
+      _logger.i(
+          'Found ${activeNotifications.length} active notifications');
+      return activeNotifications
+          .map((notification) => {
+                'customerId': notification['customerId'],
+                'customerName': notification['customerName'],
+                'planType': notification['planType'],
+                'subscriptionEnd':
+                    DateTime.parse(notification['subscriptionEnd']),
+                'notificationTime':
+                    DateTime.parse(notification['notificationTime']),
+                'message': notification['message'],
+                'status': notification['status'],
+              })
+          .toList();
     } catch (e) {
-      _logger.log(Level.error, 'Failed to update notification status: $e');
+      _logger.e('Error decoding notifications: $e');
+      return [];
     }
   }
 }
-class NotificationStorageException implements Exception {
+class NotificationSchedulingException implements Exception {
   final String message;
-  NotificationStorageException(this.message);
+  NotificationSchedulingException(this.message);
   @override
   String toString() => message;
+}
+extension StringExtension on String {
+  T? let<T>(T Function(String) transform) => transform(this);
 }
 
 ================
@@ -7098,6 +7136,7 @@ import 'package:truthy_wifi_manager/screens/customer_share_view.dart';
 import 'package:truthy_wifi_manager/screens/retention_screen.dart';
 import 'database/models/customer.dart';
 import 'providers/database_provider.dart';
+import 'screens/about_screen.dart';
 import 'screens/add_customer_screen.dart';
 import 'screens/billing_cycle_screen.dart';
 import 'screens/customer_detail_screen.dart';
@@ -7106,9 +7145,11 @@ import 'screens/downtime_input_screen.dart';
 import 'screens/edit_customer_screen.dart';
 import 'screens/expiring_subscriptions_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/how_to_screen.dart';
 import 'screens/inactive_customers_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/payments_screen.dart';
+import 'screens/scheduled_reminders_screen.dart';
 import 'screens/settings_screen.dart';
 class AppRouter {
   static Route<dynamic>? onGenerateRoute(
@@ -7126,10 +7167,17 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const CustomerShareView());
       case '/settings':
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
+      case '/scheduled-reminders':
+        return MaterialPageRoute(
+            builder: (_) => const ScheduledRemindersScreen());
       case '/billing-cycles':
         return MaterialPageRoute(builder: (_) => const BillingCycleScreen());
-     case '/retention':
+      case '/retention':
         return MaterialPageRoute(builder: (_) => const RetentionScreen());
+      case '/about':
+        return MaterialPageRoute(builder: (_) => const AboutScreen());
+      case '/how-to':
+        return MaterialPageRoute(builder: (_) => const HowToScreen());
       default:
         if (path.startsWith('/customer/')) {
           final customerId = path.split('/').last;
@@ -7213,6 +7261,9 @@ class AppRouter {
     '/settings': (context) => const SettingsScreen(),
     '/billing-cycles': (context) => const BillingCycleScreen(),
     '/retention': (context) => const RetentionScreen(),
+    '/about': (context) => const AboutScreen(),
+    '/how-to': (context) => const HowToScreen(),
+    '/scheduled-reminders': (context) => const ScheduledRemindersScreen(),
   };
 }
 
@@ -7291,6 +7342,7 @@ import 'app_router.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'services/auth_service.dart';
+import 'services/notification_scheduler.dart';
 import 'services/subscription_notification_service.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 class MyApp extends ConsumerWidget {
@@ -7381,6 +7433,7 @@ void main() async {
     await _configureLocalTimeZone();
     await SubscriptionNotificationService.initialize();
     await MobileAds.instance.initialize();
+    NotificationScheduler();
     await SubscriptionNotificationService.clearExpiredNotifications();
     final authService = AuthService();
     initialRoute = await authService.getInitialRoute();

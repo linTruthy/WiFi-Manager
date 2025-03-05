@@ -205,7 +205,7 @@ class _DowntimeInputScreenState extends ConsumerState<DowntimeInputScreen> {
 
       // Schedule notifications for updated customers
       for (final customer in activeCustomers) {
-        await SubscriptionNotificationService.scheduleExpirationNotification(
+        await SubscriptionNotificationService.scheduleSingleExpirationNotification(
             customer);
         final message =
             'Your subscription has been extended by ${_downtimeDuration.inHours} hours due to downtime.';
