@@ -33,7 +33,7 @@ class AuthService {
 
   // Check if password meets strength requirements
   bool isPasswordStrong(String password) {
-    return password.length >= 8 &&
+    return password.length >= 6 &&
         RegExp(r'[A-Z]').hasMatch(password) &&
         RegExp(r'[a-z]').hasMatch(password) &&
         RegExp(r'[0-9]').hasMatch(password) &&
@@ -141,7 +141,7 @@ class AuthService {
     if (!isPasswordStrong(password)) {
       return AuthResult(
         error:
-            'Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters',
+            'Password must be at least 6 characters long and contain uppercase, lowercase, numbers, and special characters',
       );
     }
     try {

@@ -1,5 +1,10 @@
+import 'dart:io';
+
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:in_app_update/in_app_update.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
@@ -25,10 +30,134 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late double _monthlyPrice;
   bool _isSaving = false;
   late Map<String, dynamic> _notificationSettings;
+  bool _enableNotifications = false;
+  AppUpdateInfo? _updateInfo;
+  bool _isLoading = false;
+  bool _flexibleUpdateAvailable = false;
+  Future<void> _checkForUpdate() async {
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      setState(() {
+        _updateInfo = info;
+      });
+      if (info.updateAvailability == UpdateAvailability.updateAvailable) {
+        _showUpdateDialog();
+      }
+    } catch (e) {
+      _showSnackBar('Error checking for update: $e');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showUpdateDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Available'),
+        content: const Text(
+          'A new version of Truthy WiFi Manager is available. Update now to get the latest features and improvements.',
+        ),
+        actions: [
+          if (_updateInfo?.flexibleUpdateAllowed == true)
+            TextButton(
+              onPressed: () {
+                _startFlexibleUpdate();
+                Navigator.pop(context);
+              },
+              child: const Text('Flexible Update'),
+            ),
+          if (_updateInfo?.immediateUpdateAllowed == true)
+            ElevatedButton(
+              onPressed: () {
+                _performImmediateUpdate();
+                Navigator.pop(context);
+              },
+              child: const Text('Update Now'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Later'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performImmediateUpdate() async {
+    try {
+      final result = await InAppUpdate.performImmediateUpdate();
+      if (result == AppUpdateResult.inAppUpdateFailed) {
+        _showSnackBar('Immediate update failed. Please try again.');
+      }
+    } catch (e) {
+      _showSnackBar('Error during immediate update: $e');
+    }
+  }
+
+  Future<void> _startFlexibleUpdate() async {
+    try {
+      await InAppUpdate.startFlexibleUpdate();
+      setState(() {
+        _flexibleUpdateAvailable = true;
+      });
+      _showSnackBar('Flexible update started. Complete it when ready.');
+    } catch (e) {
+      _showSnackBar('Error starting flexible update: $e');
+    }
+  }
+
+  Future<void> _completeFlexibleUpdate() async {
+    try {
+      await InAppUpdate.completeFlexibleUpdate();
+      _showSnackBar('Update completed successfully!');
+      setState(() {
+        _flexibleUpdateAvailable = false;
+      });
+    } catch (e) {
+      _showSnackBar('Error completing flexible update: $e');
+    }
+  }
+
+  Future<void> _checkNotifications() async {
+    if (Platform.isAndroid) {
+      final alarmStatus = await Permission.scheduleExactAlarm.status;
+      alarmStatus.isGranted
+          ? _enableNotifications = true
+          : _enableNotifications = false;
+      if (_enableNotifications) {
+        await SubscriptionNotificationService.initialize();
+      }
+      if (!_enableNotifications) {
+        await requestExactAlarmPermission();
+      }
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:1328499430.
+      setState(() {});
+    }
+  }
+
+  Future<void> requestExactAlarmPermission() async {
+    if (Platform.isAndroid) {
+      final intent = AndroidIntent(
+        action: 'android.settings.REQUEST_SCHEDULE_EXACT_ALARM',
+        data: Uri.parse('package:com.truthysystems.wifi').toString(),
+      );
+      await intent.launch();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _checkNotifications();
   }
 
   Future<void> _loadSettings() async {
@@ -65,10 +194,98 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               icon: const Icon(Icons.info),
               onPressed: () => Navigator.pushNamed(context, '/about'),
             ),
-            IconButton(
+            TextButton.icon(
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:3090475375.
+              label: Text('How to use'),
               icon: const Icon(Icons.help),
               onPressed: () => Navigator.pushNamed(context, '/how-to'),
             ),
+            TextButton.icon(
+              label: Text('Privacy Policy'),
+              icon: const Icon(Icons.privacy_tip),
+              onPressed: () => Navigator.pushNamed(context, '/privacy'),
+            ),
+            // Update Buttons (Android only)
+            if (Platform.isAndroid) ...[
+              Semantics(
+                label: 'Check for update button',
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _isLoading ? null : _checkForUpdate,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Check for Update'),
+                  ),
+                ),
+              ),
+              if (_updateInfo?.updateAvailability ==
+                  UpdateAvailability.updateAvailable)
+                Column(
+                  children: [
+                    if (_updateInfo?.immediateUpdateAllowed == true)
+                      Semantics(
+                        label: 'Perform immediate update button',
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _performImmediateUpdate,
+                            child: const Text('Update Now'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_updateInfo?.flexibleUpdateAllowed == true) ...[
+                      const SizedBox(height: 8),
+                      Semantics(
+                        label: 'Start flexible update button',
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _startFlexibleUpdate,
+                            child: const Text('Start Flexible Update'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (_flexibleUpdateAvailable) ...[
+                      const SizedBox(height: 8),
+                      Semantics(
+                        label: 'Complete flexible update button',
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _completeFlexibleUpdate,
+                            child: const Text('Complete Flexible Update'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              const SizedBox(height: 16),
+            ],
           ],
         ),
       ),
@@ -91,20 +308,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildSlider('Daily Plan (days before)', 'daysBeforeDaily'),
             _buildSlider('Weekly Plan (days before)', 'daysBeforeWeekly'),
             _buildSlider('Monthly Plan (days before)', 'daysBeforeMonthly'),
-            //   const Divider(height: 24),
-            // CheckboxListTile(
-            //   title: const Text(
-            //       'Prioritize urgent notifications (expiring today)'),
-            //   value: _priorityUrgent,
-            //   onChanged: (value) =>
-            //       setState(() => _priorityUrgent = value ?? true),
-            // ),
-            // CheckboxListTile(
-            //   title: const Text('Enable snooze option'),
-            //   value: _enableSnooze,
-            //   onChanged: (value) =>
-            //       setState(() => _enableSnooze = value ?? true),
-            // ),
+            const Divider(height: 24),
+            //request notification permission
+            CheckboxListTile(
+              title: const Text('Enable notifications'),
+              value: _enableNotifications,
+              onChanged: (value) => setState(() {
+                _enableNotifications = value ?? true;
+                if (_enableNotifications) {
+                  _checkNotifications();
+                }
+
+                //)
+              }),
+            ),
           ],
         ),
       ),
@@ -161,31 +378,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSliderWithLabel({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String unit,
-    required Function(double) onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$label: ${value.toStringAsFixed(1)} $unit'),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          label: '${value.toStringAsFixed(1)} $unit',
-          onChanged: onChanged,
-        ),
-      ],
     );
   }
 

@@ -1,6 +1,6 @@
 {
-    "name": "truthy_wifi_manager",
-    "short_name": "truthy_wifi_manager",
+    "name": "Truthy WiFi",
+    "short_name": "Truthy WiFi",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

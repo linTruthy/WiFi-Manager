@@ -25,6 +25,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.13.0"
+  android_intent_plus:
+    dependency: "direct main"
+    description:
+      name: android_intent_plus
+      sha256: dfc1fd3a577205ae8f11e990fb4ece8c90cceabbee56fcf48e463ecf0bd6aae3
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.3.0"
   archive:
     dependency: transitive
     description:
@@ -536,6 +544,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.5.2"
+  in_app_update:
+    dependency: "direct main"
+    description:
+      name: in_app_update
+      sha256: "489572accaa55b51518b2d64676ca8c3c6d4c989fa53cf718001882237691a3c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.3"
   intl:
     dependency: "direct main"
     description:
@@ -856,14 +872,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.2"
-  phone_number:
+  phone_numbers_parser:
     dependency: "direct main"
     description:
-      name: phone_number
-      sha256: "8d5e58db244564e8280b28798d3db660be4073b62ed1ee5b8f27b5195eb7c8fc"
+      name: phone_numbers_parser
+      sha256: "8aaa49708c9314d450d80767753c6512402e848138e5a91bf59ed3e0d3ac5d9b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.0+2"
+    version: "9.0.3"
   platform:
     dependency: transitive
     description:

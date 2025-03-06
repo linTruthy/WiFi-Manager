@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
-import 'package:phone_number/phone_number.dart';
+import 'package:phone_numbers_parser/phone_numbers_parser.dart';
+
 import 'package:truthy_wifi_manager/providers/customer_provider.dart'
     show customerProvider;
 import '../database/models/customer.dart';
@@ -24,6 +25,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   // final _contactController = TextEditingController();
   String? _phoneNumber;
   String? _isoCode;
+  IsoCode? _isoCodeEnum;
   final _referralCodeController = TextEditingController();
   PlanType _selectedPlan = PlanType.monthly;
   bool _isSaving = false;
@@ -79,6 +81,10 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 setState(() {
                   _phoneNumber = phone.completeNumber; // E.164 format
                   _isoCode = phone.countryISOCode; // e.g., 'UG', 'US'
+                  _isoCodeEnum = IsoCode.values.firstWhere(
+                    (code) => code.name == _isoCode,
+                    orElse: () => IsoCode.UG,
+                  );
                 });
               },
             ),
@@ -204,9 +210,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       setState(() {
         _isSaving = true;
       });
-
-      final phoneUtil = PhoneNumberUtil();
-      final isValid = await phoneUtil.validate(_phoneNumber!, _isoCode!);
+      final parsedPhoneNumber =
+          PhoneNumber.parse(_phoneNumber!, callerCountry: _isoCodeEnum);
+      // final phoneUtil = PhoneNumberUtil();
+      final isValid = parsedPhoneNumber.isValid();
+      // final isValid = await phoneUtil.validate(_phoneNumber!, _isoCodeEnum!);
       if (!isValid) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

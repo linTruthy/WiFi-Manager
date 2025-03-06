@@ -20,7 +20,7 @@ class _ExpiringSubscriptionsScreenState
     extends ConsumerState<ExpiringSubscriptionsScreen> {
   final AdManager _adManager = AdManager();
   int _actionCount = 0; // Track user actions for intelligent ad serving
-
+  String _filter = 'All Expiring'; // Default filter
   @override
   void initState() {
     super.initState();
@@ -32,14 +32,14 @@ class _ExpiringSubscriptionsScreenState
     await _adManager.initializeBannerAd(
       size: AdSize.banner,
       // Replace with your actual ad unit ID in production
-     // adUnitId: 'your_banner_ad_unit_id_here',
+      // adUnitId: 'your_banner_ad_unit_id_here',
     );
 
     // Initialize interstitial ad
     await _adManager.initializeInterstitialAd(
-      // Replace with your actual ad unit ID in production
-   //   adUnitId: 'your_interstitial_ad_unit_id_here',
-    );
+        // Replace with your actual ad unit ID in production
+        //   adUnitId: 'your_interstitial_ad_unit_id_here',
+        );
   }
 
   @override
@@ -62,74 +62,54 @@ class _ExpiringSubscriptionsScreenState
     final expiringSubscriptions = ref.watch(expiringSubscriptionsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Expiring Subscriptions')),
+      appBar: AppBar(
+        title: const Text('Expiring Subscriptions'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: DropdownButton<String>(
+              value: _filter,
+              items:
+                  ['Today', 'Next 3 Days', 'All Expiring'].map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _filter = newValue;
+                  });
+                }
+              },
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
             child: expiringSubscriptions.when(
-              data:
-                  (customers) =>
-                      customers.isEmpty
-                          ? const Center(
-                            child: Text('No expiring subscriptions'),
-                          )
-                          : ListView.builder(
-                            itemCount: customers.length,
-                            itemBuilder: (context, index) {
-                              final customer = customers[index];
-                              final daysUntilExpiry =
-                                  customer.subscriptionEnd
-                                      .difference(DateTime.now())
-                                      .inDays;
-
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: _getExpiryColor(
-                                    daysUntilExpiry,
-                                  ),
-                                  child: Text(
-                                    daysUntilExpiry.toString(),
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                title: Text(customer.name),
-                                subtitle: Text(
-                                  '${_formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry)}\n${DateFormat('MMM dd, yyyy - hh:mm a').format(customer.subscriptionEnd)}\nPlan: ${customer.planType.name}',
-                                ),
-                                isThreeLine: true,
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.phone),
-                                      onPressed: () {
-                                        _makeCall(customer.contact);
-                                        _incrementActionAndShowAd();
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.message),
-                                      onPressed: () {
-                                        _sendMessage(
-                                          customer.contact,
-                                          context,
-                                          customer,
-                                          daysUntilExpiry,
-                                        );
-                                        _incrementActionAndShowAd();
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                onTap: () {
-                                  _showRenewalDialog(context, ref, customer);
-                                  _incrementActionAndShowAd();
-                                },
-                              );
-                            },
-                          ),
+              data: (customers) {
+                // Sort by expiration date (soonest first)
+                customers.sort(
+                    (a, b) => a.subscriptionEnd.compareTo(b.subscriptionEnd));
+                final filteredCustomers = _applyFilter(customers);
+                return filteredCustomers.isEmpty
+                    ? const Center(
+                        child: Text('No subscriptions expiring soon'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16.0),
+                        itemCount: filteredCustomers.length,
+                        itemBuilder: (context, index) {
+                          final customer = filteredCustomers[index];
+                          return _buildCustomerCard(customer, context);
+                        },
+                      );
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(child: Text('Error: $error')),
+              error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
           // Banner ad at the bottom
@@ -145,10 +125,110 @@ class _ExpiringSubscriptionsScreenState
     );
   }
 
-  Color _getExpiryColor(int days) {
-    if (days <= 1) return Colors.red;
-    if (days <= 2) return Colors.orange;
-    return Colors.yellow.shade700;
+  List<Customer> _applyFilter(List<Customer> customers) {
+    final now = DateTime.now();
+    switch (_filter) {
+      case 'Today':
+        return customers
+            .where((c) => c.subscriptionEnd.day == now.day)
+            .toList();
+      case 'Next 3 Days':
+        return customers
+            .where((c) => c.subscriptionEnd.difference(now).inDays <= 3)
+            .toList();
+      case 'All Expiring':
+      default:
+        return customers;
+    }
+  }
+
+  Widget _buildCustomerCard(Customer customer, BuildContext context) {
+    final now = DateTime.now();
+    final daysLeft = customer.subscriptionEnd.difference(now).inDays;
+    final hoursLeft = customer.subscriptionEnd.difference(now).inHours % 24;
+    final isExpired = customer.subscriptionEnd.isBefore(now);
+    final expiresToday = daysLeft == 0 && !isExpired;
+
+    Color urgencyColor;
+    if (isExpired) {
+      urgencyColor = Colors.redAccent;
+    } else if (expiresToday) {
+      urgencyColor = Colors.orangeAccent;
+    } else {
+      urgencyColor = Colors.yellowAccent;
+    }
+
+    String expiryText;
+    if (isExpired) {
+      expiryText = 'Expired ${-daysLeft} day${-daysLeft != 1 ? 's' : ''} ago';
+    } else if (daysLeft > 0) {
+      expiryText = 'Expires in $daysLeft day${daysLeft != 1 ? 's' : ''}';
+    } else {
+      expiryText = 'Expires in $hoursLeft hour${hoursLeft != 1 ? 's' : ''}';
+    }
+    final daysUntilExpiry =
+        customer.subscriptionEnd.difference(DateTime.now()).inDays;
+    return Semantics(
+      label:
+          'Customer ${customer.name}, subscription expires ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}, $expiryText, tap to renew',
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8.0),
+        child: ListTile(
+          title: Text(customer.name),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Plan: ${customer.planType.name}'),
+              Text(
+                expiryText,
+                style:
+                    TextStyle(color: urgencyColor, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                  '${_formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry)}\n${DateFormat('MMM dd, yyyy - hh:mm a').format(customer.subscriptionEnd)}\nPlan: ${customer.planType.name}',
+                  style: TextStyle(
+                      color: urgencyColor, fontWeight: FontWeight.bold)),
+              Semantics(
+                label: 'Renew subscription for ${customer.name}',
+                child: ElevatedButton(
+                  onPressed: () {
+                    _showRenewalDialog(context, ref, customer);
+                    _incrementActionAndShowAd();
+                  },
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  child: const Text('Renew'),
+                ),
+              ),
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.phone),
+                onPressed: () {
+                  _makeCall(customer.contact);
+                  _incrementActionAndShowAd();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.message),
+                onPressed: () {
+                  _sendMessage(
+                    customer.contact,
+                    context,
+                    customer,
+                    daysUntilExpiry,
+                  );
+                  _incrementActionAndShowAd();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String _formatExpiryTime(DateTime subscriptionEnd, int daysUntilExpiry) {
@@ -186,25 +266,24 @@ class _ExpiringSubscriptionsScreenState
   ) async {
     final messageOptions = await showDialog<String>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Send Message'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.message),
-                  title: const Text('SMS'),
-                  onTap: () => Navigator.pop(context, 'sms'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.whatshot),
-                  title: const Text('WhatsApp Business'),
-                  onTap: () => Navigator.pop(context, 'whatsapp'),
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: const Text('Send Message'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.message),
+              title: const Text('SMS'),
+              onTap: () => Navigator.pop(context, 'sms'),
             ),
-          ),
+            ListTile(
+              leading: const Icon(Icons.whatshot),
+              title: const Text('WhatsApp Business'),
+              onTap: () => Navigator.pop(context, 'whatsapp'),
+            ),
+          ],
+        ),
+      ),
     );
 
     if (messageOptions == null) return;
@@ -227,12 +306,11 @@ class _ExpiringSubscriptionsScreenState
       'Your WiFi Service Provider',
     );
 
-    final url =
-        messageOptions == 'whatsapp'
-            ? Uri.parse(
-              'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
-            )
-            : Uri.parse('sms:$contact?body=$message');
+    final url = messageOptions == 'whatsapp'
+        ? Uri.parse(
+            'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
+          )
+        : Uri.parse('sms:$contact?body=$message');
 
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
@@ -246,30 +324,29 @@ class _ExpiringSubscriptionsScreenState
   ) async {
     return showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Renew Subscription'),
-            content: Text(
-              'Renew ${customer.name}\'s ${customer.planType.name} plan?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(
-                    context,
-                    '/payments',
-                    arguments: customer,
-                  );
-                },
-                child: const Text('RENEW'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Renew Subscription'),
+        content: Text(
+          'Renew ${customer.name}\'s ${customer.planType.name} plan?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(
+                context,
+                '/payments',
+                arguments: customer,
+              );
+            },
+            child: const Text('RENEW'),
+          ),
+        ],
+      ),
     );
   }
 }

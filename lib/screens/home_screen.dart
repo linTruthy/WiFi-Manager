@@ -31,10 +31,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   final GlobalKey _customersKey = GlobalKey();
   final GlobalKey _paymentsKey = GlobalKey();
   final GlobalKey _expiringKey = GlobalKey();
-  final GlobalKey _downtimeKey = GlobalKey();
-  final GlobalKey _billingKey = GlobalKey();
   final GlobalKey _retentionKey = GlobalKey();
-  final GlobalKey _howToKey = GlobalKey();
   final GlobalKey _settingsKey = GlobalKey();
   final _filterKey = GlobalKey();
   final _quickActionsKey = GlobalKey();

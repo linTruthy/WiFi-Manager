@@ -62,6 +62,7 @@ database/
     database_repository.dart
 providers/
   active_customer_trend_provider.dart
+  billing_cycles_provider.dart
   customer_provider.dart
   database_provider.dart
   notification_schedule_provider.dart
@@ -752,6 +753,17 @@ final activeCustomerTrendProvider = FutureProvider<double>((ref) async {
 });
 
 ================
+File: providers/billing_cycles_provider.dart
+================
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:truthy_wifi_manager/database/models/billing_cycle.dart';
+import 'package:truthy_wifi_manager/providers/database_provider.dart';
+final billingCyclesProvider = FutureProvider<List<BillingCycle>>((ref) async {
+  final database = ref.watch(databaseProvider);
+  return database.getBillingCycles();
+});
+
+================
 File: providers/customer_provider.dart
 ================
 import 'package:riverpod/riverpod.dart';
@@ -1021,9 +1033,10 @@ class AboutScreen extends StatelessWidget {
 ================
 File: screens/add_customer_screen.dart
 ================
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'package:truthy_wifi_manager/providers/customer_provider.dart'
     show customerProvider;
 import '../database/models/customer.dart';
@@ -1040,9 +1053,12 @@ class AddCustomerScreen extends ConsumerStatefulWidget {
 class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _contactController = TextEditingController();
+  String? _phoneNumber;
+  String? _isoCode;
+  IsoCode? _isoCodeEnum;
   final _referralCodeController = TextEditingController();
   PlanType _selectedPlan = PlanType.monthly;
+  bool _isSaving = false;
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1052,6 +1068,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const Text(
+              'Please fill in the details to add a new customer.',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(
@@ -1059,24 +1080,28 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 border: OutlineInputBorder(),
               ),
               validator: (value) {
-                if (value?.isEmpty ?? true) {
-                  return 'Please enter a name';
+                if (value == null || value.isEmpty) {
+                  return 'Customer name is required';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _contactController,
+            IntlPhoneField(
               decoration: const InputDecoration(
-                labelText: 'Contact',
+                labelText: 'Phone Number',
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (value?.isEmpty ?? true) {
-                  return 'Please enter contact info';
-                }
-                return null;
+              initialCountryCode: 'UG',
+              onChanged: (phone) {
+                setState(() {
+                  _phoneNumber = phone.completeNumber;
+                  _isoCode = phone.countryISOCode;
+                  _isoCodeEnum = IsoCode.values.firstWhere(
+                    (code) => code.name == _isoCode,
+                    orElse: () => IsoCode.UG,
+                  );
+                });
               },
             ),
             const SizedBox(height: 16),
@@ -1084,6 +1109,8 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
               controller: _referralCodeController,
               decoration: const InputDecoration(
                 labelText: 'Referral Code (Optional)',
+                helperText:
+                    'Enter a referral code to reward the referrer with free subscription days',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1109,9 +1136,20 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
               },
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _saveCustomer,
-              child: const Text('Save Customer'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: _isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isSaving ? null : _saveCustomer,
+                  child: _isSaving
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('Save Customer'),
+                ),
+              ],
             ),
           ],
         ),
@@ -1120,18 +1158,57 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   }
   void _saveCustomer() async {
     if (_formKey.currentState?.validate() ?? false) {
+      if (_phoneNumber == null || _isoCode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a phone number')),
+        );
+        return;
+      }
+      setState(() {
+        _isSaving = true;
+      });
+      final parsedPhoneNumber =
+          PhoneNumber.parse(_phoneNumber!, callerCountry: _isoCodeEnum);
+      final isValid = parsedPhoneNumber.isValid();
+      if (!isValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Please enter a valid phone number for the selected country')),
+        );
+        setState(() {
+          _isSaving = false;
+        });
+        return;
+      }
+      final referralCode = _referralCodeController.text;
+      String? referrerId;
+      if (referralCode.isNotEmpty) {
+        referrerId = await _getCustomerIdByReferralCode(referralCode);
+        if (referrerId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Invalid referral code. Customer will be added without referral.'),
+            ),
+          );
+        }
+      }
       final customer = Customer(
         name: _nameController.text,
-        contact: _contactController.text,
+        contact: _phoneNumber!,
         isActive: true,
         wifiName: Customer.generateWifiName(_nameController.text),
-        currentPassword: _generatePassword(),
+        currentPassword: Customer.generate(
+          length: 6,
+          useSpecialChars: true,
+          useLowerCase: true,
+          useNumbers: true,
+        ),
         subscriptionStart: DateTime.now(),
         subscriptionEnd: _calculateEndDate(),
         planType: _selectedPlan,
-        referredBy: _referralCodeController.text.isNotEmpty
-            ? await _getCustomerIdByReferralCode(_referralCodeController.text)
-            : null,
+        referredBy: referrerId,
       );
       try {
         await ref.read(databaseProvider).saveCustomer(customer);
@@ -1144,24 +1221,26 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           if (customer.referredBy != null) {
             await _applyReferralReward(customer.referredBy!, customer);
           }
+          ref.invalidate(activeCustomersProvider);
+          ref.invalidate(customerProvider);
+          ref.invalidate(expiringSubscriptionsProvider);
+          ref.invalidate(notificationSchedulerProvider);
         }
-        ref.invalidate(activeCustomersProvider);
-        ref.invalidate(databaseProvider);
-        ref.invalidate(customerProvider);
-        ref.invalidate(expiringSubscriptionsProvider);
-        ref.invalidate(notificationSchedulerProvider);
       } catch (e, stackTrace) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: SelectableText(
-                'Error saving customer: $e | $stackTrace',
-              ),
-              duration: Duration(minutes: 2),
+              content:
+                  SelectableText('Error saving customer: $e | $stackTrace'),
+              duration: const Duration(minutes: 2),
             ),
           );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
         }
       }
     }
@@ -1255,9 +1334,6 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       return const Duration(days: 1);
     }
   }
-  String _generatePassword() {
-    return 'temp-pass-${Random().nextInt(9999)}';
-  }
   DateTime _calculateEndDate() {
     switch (_selectedPlan) {
       case PlanType.daily:
@@ -1276,6 +1352,7 @@ File: screens/billing_cycle_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:truthy_wifi_manager/providers/billing_cycles_provider.dart';
 import '../database/models/billing_cycle.dart';
 import '../database/models/payment.dart';
 import '../providers/database_provider.dart';
@@ -1285,37 +1362,62 @@ class BillingCycleScreen extends ConsumerStatefulWidget {
   ConsumerState<BillingCycleScreen> createState() => _BillingCycleScreenState();
 }
 class _BillingCycleScreenState extends ConsumerState<BillingCycleScreen> {
-  DateTimeRange? _selectedRange;
+  DateTime? _startDate;
+  DateTime? _endDate;
   double _wifiExpense = 0.0;
+  final _expenseController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   @override
   Widget build(BuildContext context) {
     final billingCyclesAsync = ref.watch(billingCyclesProvider);
+    final currencyFormat =
+        NumberFormat.currency(locale: 'en_US', symbol: 'UGX', decimalDigits: 0);
     return Scaffold(
       appBar: AppBar(title: const Text('Billing Cycles')),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                ElevatedButton(
-                  onPressed: _selectDateRange,
-                  child: Text(_selectedRange == null
-                      ? 'Select Billing Period'
-                      : '${DateFormat('MMM d').format(_selectedRange!.start)} - ${DateFormat('MMM d').format(_selectedRange!.end)}'),
-                ),
-                TextField(
-                  decoration:
-                      const InputDecoration(labelText: 'WiFi Expense (UGX)'),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) =>
-                      _wifiExpense = double.tryParse(value) ?? 0.0,
-                ),
-                ElevatedButton(
-                  onPressed: _saveBillingCycle,
-                  child: const Text('Save Billing Cycle'),
-                ),
-              ],
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  _buildDateField(
+                      'Start Date', _startDate, (date) => _startDate = date),
+                  const SizedBox(height: 16),
+                  _buildDateField(
+                      'End Date', _endDate, (date) => _endDate = date),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _expenseController,
+                    decoration: const InputDecoration(
+                      labelText: 'WiFi Expense',
+                      prefixText: 'UGX ',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter the expense';
+                      }
+                      final number = double.tryParse(value);
+                      if (number == null || number < 0) {
+                        return 'Please enter a valid positive number';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) =>
+                        _wifiExpense = double.tryParse(value) ?? 0.0,
+                  ),
+                  const SizedBox(height: 16),
+                  Semantics(
+                    label: 'Save billing cycle',
+                    child: ElevatedButton(
+                      onPressed: _saveBillingCycle,
+                      child: const Text('Save Billing Cycle'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -1327,21 +1429,28 @@ class _BillingCycleScreenState extends ConsumerState<BillingCycleScreen> {
                   final totalIncome = cycle.customerPayments.values
                       .fold(0.0, (sum, amount) => sum + amount);
                   final profit = totalIncome - cycle.wifiExpense;
-                  return Card(
-                    child: ListTile(
-                      title: Text(
-                          '${DateFormat('MMM d, y').format(cycle.startDate)} - ${DateFormat('MMM d, y').format(cycle.endDate)}'),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                              'Expense: UGX ${cycle.wifiExpense.toStringAsFixed(0)}'),
-                          Text('Income: UGX ${totalIncome.toStringAsFixed(0)}'),
-                          Text('Profit: UGX ${profit.toStringAsFixed(0)}',
+                  return Semantics(
+                    label:
+                        'Billing cycle from ${DateFormat('MMM d, y').format(cycle.startDate)} to ${DateFormat('MMM d, y').format(cycle.endDate)}, Expense: ${currencyFormat.format(cycle.wifiExpense)}, Income: ${currencyFormat.format(totalIncome)}, Profit: ${currencyFormat.format(profit)}',
+                    child: Card(
+                      child: ListTile(
+                        title: Text(
+                            '${DateFormat('MMM d, y').format(cycle.startDate)} - ${DateFormat('MMM d, y').format(cycle.endDate)}'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                'Expense: ${currencyFormat.format(cycle.wifiExpense)}'),
+                            Text(
+                                'Income: ${currencyFormat.format(totalIncome)}'),
+                            Text(
+                              'Profit: ${currencyFormat.format(profit)}',
                               style: TextStyle(
                                   color:
-                                      profit >= 0 ? Colors.green : Colors.red)),
-                        ],
+                                      profit >= 0 ? Colors.green : Colors.red),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -1355,43 +1464,79 @@ class _BillingCycleScreenState extends ConsumerState<BillingCycleScreen> {
       ),
     );
   }
-  Future<void> _selectDateRange() async {
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+  Widget _buildDateField(
+      String label, DateTime? date, Function(DateTime?) onDateSelected) {
+    return Semantics(
+      label: 'Select $label'.toLowerCase(),
+      child: TextFormField(
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.calendar_today),
+        ),
+        controller: TextEditingController(
+          text: date != null ? DateFormat('MMM d, y').format(date) : '',
+        ),
+        onTap: () async {
+          final selectedDate = await showDatePicker(
+            context: context,
+            initialDate: date ?? DateTime.now(),
+            firstDate: DateTime(2000),
+            lastDate: DateTime.now(),
+          );
+          if (selectedDate != null) {
+            setState(() {
+              onDateSelected(selectedDate);
+            });
+          }
+        },
+      ),
     );
-    if (range != null) setState(() => _selectedRange = range);
   }
   Future<void> _saveBillingCycle() async {
-    if (_selectedRange == null) return;
-    final database = ref.read(databaseProvider);
-    final paymentsSnapshot = await database.firestore
-        .collection(database.getUserCollectionPath('payments'))
-        .where('paymentDate',
-            isGreaterThanOrEqualTo: _selectedRange!.start.toIso8601String())
-        .where('paymentDate',
-            isLessThanOrEqualTo: _selectedRange!.end.toIso8601String())
-        .get();
-    final payments = paymentsSnapshot.docs
-        .map((doc) => Payment.fromJson(doc.id, doc.data()))
-        .toList();
-    final customerPayments =
-        Map.fromEntries(payments.map((p) => MapEntry(p.customerId, p.amount)));
-    final cycle = BillingCycle(
-      startDate: _selectedRange!.start,
-      endDate: _selectedRange!.end,
-      wifiExpense: _wifiExpense,
-      customerPayments: customerPayments,
-    );
-    await database.saveBillingCycle(cycle);
-    ref.invalidate(billingCyclesProvider);
+    if (_startDate == null ||
+        _endDate == null ||
+        _endDate!.isBefore(_startDate!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Please select valid start and end dates')),
+      );
+      return;
+    }
+    if (_formKey.currentState!.validate()) {
+      final database = ref.read(databaseProvider);
+      final paymentsSnapshot = await database.firestore
+          .collection(database.getUserCollectionPath('payments'))
+          .where('paymentDate',
+              isGreaterThanOrEqualTo: _startDate!.toIso8601String())
+          .where('paymentDate',
+              isLessThanOrEqualTo: _endDate!.toIso8601String())
+          .get();
+      final payments = paymentsSnapshot.docs
+          .map((doc) => Payment.fromJson(doc.id, doc.data()))
+          .toList();
+      final customerPayments = Map.fromEntries(
+          payments.map((p) => MapEntry(p.customerId, p.amount)));
+      final cycle = BillingCycle(
+        startDate: _startDate!,
+        endDate: _endDate!,
+        wifiExpense: _wifiExpense,
+        customerPayments: customerPayments,
+      );
+      await database.saveBillingCycle(cycle);
+      ref.invalidate(billingCyclesProvider);
+      setState(() {
+        _startDate = null;
+        _endDate = null;
+        _wifiExpense = 0.0;
+        _expenseController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Billing cycle saved successfully')),
+      );
+    }
   }
 }
-final billingCyclesProvider = FutureProvider<List<BillingCycle>>((ref) async {
-  final database = ref.watch(databaseProvider);
-  return database.getBillingCycles();
-});
 
 ================
 File: screens/customer_detail_screen.dart
@@ -1683,7 +1828,9 @@ File: screens/customer_share_view.dart
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 class CustomerShareView extends StatefulWidget {
   const CustomerShareView({super.key});
   @override
@@ -2135,6 +2282,7 @@ class _CustomerShareViewState extends State<CustomerShareView> {
     );
   }
   Widget _buildReferralSection() {
+    final theme = Theme.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2157,53 +2305,67 @@ class _CustomerShareViewState extends State<CustomerShareView> {
                     fontWeight: FontWeight.bold,
                   ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Share your referral code with friends and earn up to 7 days of free service for each friend who joins.',
+               style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+            ),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    "Your Referral Code",
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+            Semantics(
+              label:
+                  'Your referral code is ${customerData?['referralCode']}. Tap to copy.',
+              child: InkWell(
+                onTap: () {
+                  Clipboard.setData(
+                      ClipboardData(text: customerData?['referralCode']));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Referral code copied!')),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    customerData?['referralCode'] ?? 'N/A',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[900],
-                    ),
+                  child: Column(
+                    children: [
+                      Text(
+                        "Your Referral Code",
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        customerData?['referralCode'] ?? 'N/A',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[900],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
             _buildReferralRewards(),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-              },
-              icon: const Icon(Icons.share),
-              label: Text("Share & Earn",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[600],
-                  )),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+            Semantics(
+              label: 'Share referral code',
+              child: IconButton(
+                icon:  Icon(Icons.share,color: Colors.grey[600],),
+                onPressed: () {
+                  Share.share(
+                    'Join Truthy WiFi using my referral code: ${customerData?['referralCode']}',
+                  );
+                },
               ),
             ),
           ],
@@ -2499,6 +2661,7 @@ File: screens/customers_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../database/models/customer.dart';
 import '../providers/database_provider.dart';
 import '../services/ad_manager.dart';
@@ -2512,10 +2675,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoadingMore = false;
   static const int _itemsPerAd = 8;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   @override
   void initState() {
     super.initState();
     _initializeAds();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
     _setupScrollListener();
   }
   Future<void> _initializeAds() async {
@@ -2530,6 +2700,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       }
     });
   }
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    _adManager.dispose();
+    super.dispose();
+  }
   Future<void> _loadMoreAds() async {
     if (!_isLoadingMore) {
       setState(() => _isLoadingMore = true);
@@ -2541,6 +2718,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     BuildContext context,
     Customer customer,
   ) async {
+    // Show interstitial ad with 20% probability when viewing customer details
     if (!_isLoadingMore && DateTime.now().second % 5 == 0) {
       final bool adShown = await _adManager.showInterstitialAd();
       if (adShown) {
@@ -2556,12 +2734,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     }
   }
   @override
-  void dispose() {
-    _scrollController.dispose();
-    _adManager.dispose();
-    super.dispose();
-  }
-  @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(activeCustomersProvider);
     return Scaffold(
@@ -2569,7 +2741,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         title: const Text('Active Customers'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.people_outline),
+            icon: const Icon(Icons.person_off_outlined),
             onPressed: () {
               Navigator.pushNamed(context, '/inactive-customers');
             },
@@ -2578,48 +2750,155 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Search by name',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? Semantics(
+                        label: 'Clear search query',
+                        child: IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        ),
+                      )
+                    : null,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ),
           Expanded(
             child: customersAsync.when(
-              data:
-                  (customers) =>
-                      customers.isEmpty
-                          ? const Center(child: Text('No active customers'))
-                          : ListView.builder(
+              data: (customers) {
+                final filteredCustomers = customers
+                    .where((customer) =>
+                        customer.name.toLowerCase().contains(_searchQuery))
+                    .toList();
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'Showing ${filteredCustomers.length} active customers',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () => ref.refresh(activeCustomersProvider
+                            as Refreshable<Future<void>>),
+                        child: ListView.builder(
                             controller: _scrollController,
-                            itemCount:
-                                customers.length +
-                                (customers.length ~/ _itemsPerAd),
-                            itemBuilder: (context, index) {
-                              final customerIndex =
-                                  index - (index ~/ (_itemsPerAd + 1));
-                              if (index > 0 && index % (_itemsPerAd + 1) == 0) {
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                          itemCount: filteredCustomers.length +
+                              (filteredCustomers.length ~/ _itemsPerAd),
+                          itemBuilder: (context, index) {
+                            final customerIndex =
+                                index - (index ~/ (_itemsPerAd + 1));
+                            if (index > 0 && index % (_itemsPerAd + 1) == 0) {
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
                                   ),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8,
-                                    ),
-                                    child: _adManager.getBannerAdWidget(
-                                      maxWidth:
-                                          MediaQuery.of(context).size.width -
-                                          32,
-                                    ),
+                                  child: _adManager.getBannerAdWidget(
+                                    maxWidth:
+                                        MediaQuery.of(context).size.width - 32,
                                   ),
-                                );
-                              }
-                              final customer = customers[customerIndex];
-                              return CustomerListTile(
-                                customer: customer,
-                                onTap:
-                                    () => _handleCustomerTap(context, customer),
+                                ),
                               );
-                            },
-                          ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(child: Text('Error: $error')),
+                            }
+                            final customer = filteredCustomers[customerIndex];
+                            return Semantics(
+                              button: true,
+                              label:
+                                  'View details for customer ${customer.name}, subscription ends on ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}, plan: ${customer.planType.name}',
+                              excludeSemantics: true,
+                              child: ListTile(
+                                title: Text(
+                                  customer.name,
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                                subtitle: Text(
+                                  customer.subscriptionEnd
+                                          .isBefore(DateTime.now())
+                                      ? 'Ended :${DateFormat('MMM d, y - hh:mm a').format(customer.subscriptionEnd)} • ${customer.planType.name}'
+                                      : 'Ends: ${DateFormat('MMM d, y - hh:mm a').format(customer.subscriptionEnd)} • ${customer.planType.name}',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Semantics(
+                                      label: 'Call customer ${customer.name}',
+                                      child: IconButton(
+                                        icon: const Icon(Icons.phone, size: 24),
+                                        padding: const EdgeInsets.all(12.0),
+                                        onPressed: () =>
+                                            _launchPhone(customer.contact),
+                                      ),
+                                    ),
+                                    Semantics(
+                                      label:
+                                          'Message customer ${customer.name}',
+                                      child: IconButton(
+                                        icon:
+                                            const Icon(Icons.message, size: 24),
+                                        padding: const EdgeInsets.all(12.0),
+                                        onPressed: () => _launchSMS(
+                                            customer.contact, customer),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  _handleCustomerTap(context, customer);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+              loading: () => Center(
+                child: Semantics(
+                  label: 'Loading customers',
+                  child: const CircularProgressIndicator(),
+                ),
+              ),
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Failed to load customers. Please try again.',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 16),
+                    Semantics(
+                      label: 'Retry loading customers',
+                      child: ElevatedButton(
+                        onPressed: () => ref.refresh(activeCustomersProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           Container(
@@ -2642,6 +2921,45 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         ],
       ),
     );
+  }
+  Future<void> _launchPhone(String contact) async {
+    final url = Uri.parse('tel:$contact');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    }
+  }
+  Future<void> _launchSMS(String contact, Customer customer) async {
+    final messageOptions = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Message'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.message),
+              title: const Text('SMS'),
+              onTap: () => Navigator.pop(context, 'sms'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.whatshot),
+              title: const Text('WhatsApp Business'),
+              onTap: () => Navigator.pop(context, 'whatsapp'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (messageOptions == null) return;
+    final message = Uri.encodeComponent('Hello ${customer.name},\n\n');
+    final url = messageOptions == 'whatsapp'
+        ? Uri.parse(
+            'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
+          )
+        : Uri.parse('sms:$contact?body=$message');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    }
   }
 }
 class CustomerListTile extends StatelessWidget {
@@ -2680,12 +2998,11 @@ class CustomerListTile extends StatelessWidget {
         ),
         trailing: IconButton(
           icon: const Icon(Icons.edit),
-          onPressed:
-              () => Navigator.pushNamed(
-                context,
-                '/edit-customer/${customer.id}',
-                arguments: customer,
-              ),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            '/edit-customer/${customer.id}',
+            arguments: customer,
+          ),
         ),
       ),
     );
@@ -2696,14 +3013,10 @@ class CustomerListTile extends StatelessWidget {
 File: screens/downtime_input_screen.dart
 ================
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../database/models/customer.dart';
 import '../providers/database_provider.dart';
-import '../providers/subscription_provider.dart';
-import '../services/subscription_notification_service.dart';
 class DowntimeInputScreen extends ConsumerStatefulWidget {
   const DowntimeInputScreen({super.key});
   @override
@@ -2712,192 +3025,282 @@ class DowntimeInputScreen extends ConsumerStatefulWidget {
 }
 class _DowntimeInputScreenState extends ConsumerState<DowntimeInputScreen> {
   final _formKey = GlobalKey<FormState>();
-  Duration _downtimeDuration = Duration.zero;
+  DateTime? _startDateTime;
+  DateTime? _endDateTime;
+  String? _reason;
+  final _reasonController = TextEditingController();
+  final List<String> _commonReasons = [
+    'Power Outage',
+    'Network Maintenance',
+    'Hardware Failure',
+    'Other',
+  ];
+  @override
+  void initState() {
+    super.initState();
+    _startDateTime = DateTime.now();
+  }
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final duration = _calculateDuration();
     final database = ref.watch(databaseProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage Downtime')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Downtime Duration (in hours)',
-                      border: OutlineInputBorder(),
+      appBar: AppBar(
+        title: const Text('Log Downtime'),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  children: [
+                    _buildDateTimeField(
+                      label: 'Start Time',
+                      value: _startDateTime,
+                      onSelected: (dateTime) =>
+                          setState(() => _startDateTime = dateTime),
                     ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a duration';
-                      }
-                      if (int.tryParse(value) == null) {
-                        return 'Please enter a valid number';
-                      }
-                      return null;
-                    },
-                    onSaved: (value) {
-                      _downtimeDuration = Duration(hours: int.parse(value!));
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _applyDowntime,
-                    child: const Text('Apply Downtime'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text('Past Downtimes',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: database.firestore
-                    .collection(database.getUserCollectionPath('downtime_logs'))
-                    .orderBy('timestamp', descending: true)
-                    .limit(50)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(
-                        child: Text('No past downtimes recorded.'));
-                  }
-                  final downtimes = snapshot.data!.docs;
-                  return ListView.builder(
-                    itemCount: downtimes.length,
-                    itemBuilder: (context, index) {
-                      final downtime =
-                          downtimes[index].data() as Map<String, dynamic>;
-                      final timestamp =
-                          DateTime.parse(downtime['timestamp'] as String);
-                      final durationHours = downtime['durationHours'] as int;
-                      final affectedCustomers =
-                          (downtime['affectedCustomers'] as List<dynamic>)
-                              .cast<String>();
-                      return ExpansionTile(
-                        title: Text(
-                          'Downtime: $durationHours hours on ${DateFormat('MMM d, y - h:mm a').format(timestamp)}',
+                    const SizedBox(height: 8),
+                    _buildDateTimeField(
+                      label: 'End Time',
+                      value: _endDateTime,
+                      onSelected: (dateTime) =>
+                          setState(() => _endDateTime = dateTime),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _reason,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for Downtime',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _commonReasons.map((reason) {
+                        return DropdownMenuItem<String>(
+                          value: reason,
+                          child: Text(reason),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _reason = value;
+                          if (value == 'Other') {
+                            _reasonController.clear();
+                          } else {
+                            _reasonController.text = value ?? '';
+                          }
+                        });
+                      },
+                      validator: (value) =>
+                          value == null ? 'Please select a reason' : null,
+                    ),
+                    if (_reason == 'Other') ...[
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _reasonController,
+                        decoration: const InputDecoration(
+                          labelText: 'Specify Reason',
+                          border: OutlineInputBorder(),
                         ),
-                        subtitle:
-                            Text('Affected Users: ${affectedCustomers.length}'),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: affectedCustomers
-                                  .map((customerId) =>
-                                      FutureBuilder<DocumentSnapshot>(
-                                        future: database.firestore
-                                            .collection(
-                                                database.getUserCollectionPath(
-                                                    'customers'))
-                                            .doc(customerId)
-                                            .get(),
-                                        builder: (context, customerSnapshot) {
-                                          if (!customerSnapshot.hasData) {
-                                            return const SizedBox.shrink();
-                                          }
-                                          final customerData =
-                                              customerSnapshot.data!.data()
-                                                  as Map<String, dynamic>?;
-                                          return Text(customerData?['name'] ??
-                                              'Unknown Customer');
-                                        },
-                                      ))
-                                  .toList(),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
+                        validator: (value) =>
+                            value!.isEmpty ? 'Please specify the reason' : null,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    if (duration != null)
+                      Semantics(
+                        label:
+                            'Downtime duration: ${_formatDuration(duration)}',
+                        child: Text(
+                          'Duration: ${_formatDuration(duration)}',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Semantics(
+                      label: 'Save downtime record',
+                      child: ElevatedButton(
+                        onPressed: _isFormValid() ? _saveDowntime : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('Save Downtime'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 24),
+          const Text('Past Downtimes',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: database.firestore
+                  .collection(database.getUserCollectionPath('downtime_logs'))
+                  .orderBy('timestamp', descending: true)
+                  .limit(50)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                      child: Text('No past downtimes recorded.'));
+                }
+                final downtimes = snapshot.data!.docs;
+                return ListView.builder(
+                  itemCount: downtimes.length,
+                  itemBuilder: (context, index) {
+                    final downtime =
+                        downtimes[index].data() as Map<String, dynamic>;
+                    final timestamp =
+                        DateTime.parse(downtime['timestamp'] as String);
+                    final durationHours = downtime['durationHours'] as int;
+                    final affectedCustomers =
+                        (downtime['affectedCustomers'] as List<dynamic>)
+                            .cast<String>();
+                    return ExpansionTile(
+                      title: Text(
+                        'Downtime: $durationHours hours on ${DateFormat('MMM d, y - h:mm a').format(timestamp)}',
+                      ),
+                      subtitle:
+                          Text('Affected Users: ${affectedCustomers.length}'),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: affectedCustomers
+                                .map((customerId) =>
+                                    FutureBuilder<DocumentSnapshot>(
+                                      future: database.firestore
+                                          .collection(
+                                              database.getUserCollectionPath(
+                                                  'customers'))
+                                          .doc(customerId)
+                                          .get(),
+                                      builder: (context, customerSnapshot) {
+                                        if (!customerSnapshot.hasData) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        final customerData =
+                                            customerSnapshot.data!.data()
+                                                as Map<String, dynamic>?;
+                                        return Text(customerData?['name'] ??
+                                            'Unknown Customer');
+                                      },
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
-  Future<void> _applyDowntime() async {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Confirm Downtime'),
-          content: Text(
-              'Extend all active subscriptions by ${_downtimeDuration.inHours} hours?'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Confirm')),
-          ],
+  Widget _buildDateTimeField({
+    required String label,
+    required DateTime? value,
+    required Function(DateTime?) onSelected,
+  }) {
+    return Semantics(
+      label: 'Select $label',
+      child: TextFormField(
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.calendar_today),
+          border: const OutlineInputBorder(),
         ),
+        controller: TextEditingController(
+          text: value != null
+              ? DateFormat('MMM d, y - hh:mm a').format(value)
+              : '',
+        ),
+        validator: (value) => value!.isEmpty ? 'Please select $label' : null,
+        onTap: () async {
+          final date = await showDatePicker(
+            context: context,
+            initialDate: value ?? DateTime.now(),
+            firstDate: DateTime(2000),
+            lastDate: DateTime.now().add(const Duration(days: 1)),
+          );
+          if (date != null) {
+            final time = await showTimePicker(
+              context: context,
+              initialTime: TimeOfDay.fromDateTime(value ?? DateTime.now()),
+            );
+            if (time != null) {
+              final dateTime = DateTime(
+                date.year,
+                date.month,
+                date.day,
+                time.hour,
+                time.minute,
+              );
+              onSelected(dateTime);
+            }
+          }
+        },
+      ),
+    );
+  }
+  Duration? _calculateDuration() {
+    if (_startDateTime != null && _endDateTime != null) {
+      return _endDateTime!.difference(_startDateTime!);
+    }
+    return null;
+  }
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    return '$hours hour${hours != 1 ? 's' : ''} $minutes minute${minutes != 1 ? 's' : ''}';
+  }
+  bool _isFormValid() {
+    return _formKey.currentState?.validate() == true &&
+        _startDateTime != null &&
+        _endDateTime != null &&
+        (_reason != null &&
+            (_reason != 'Other' || _reasonController.text.isNotEmpty)) &&
+        (_endDateTime!.isAfter(_startDateTime!));
+  }
+  Future<void> _saveDowntime() async {
+    final database = ref.read(databaseProvider);
+    final downtimeData = {
+      'startTime': _startDateTime!.toIso8601String(),
+      'endTime': _endDateTime!.toIso8601String(),
+      'reason': _reason == 'Other' ? _reasonController.text : _reason,
+      'durationMinutes': _calculateDuration()!.inMinutes,
+      'loggedAt': DateTime.now().toIso8601String(),
+    };
+    try {
+      await database.firestore
+          .collection(database.getUserCollectionPath('downtime'))
+          .add(downtimeData);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downtime recorded successfully')),
       );
-      if (confirmed != true || !mounted) return;
-      final database = ref.read(databaseProvider);
-      final snapshot = await database.firestore
-          .collection(database.getUserCollectionPath('customers'))
-          .where('isActive', isEqualTo: true)
-          .get();
-      final activeCustomers = snapshot.docs
-          .map((doc) => Customer.fromJson(doc.id, doc.data()))
-          .toList();
-      final batch = database.firestore.batch();
-      for (final customer in activeCustomers) {
-        customer.subscriptionEnd =
-            customer.subscriptionEnd.add(_downtimeDuration);
-        batch.set(
-          database.firestore
-              .collection(database.getUserCollectionPath('customers'))
-              .doc(customer.id),
-          customer.toJson(),
-        );
-      }
-      final downtimeLog = {
-        'durationHours': _downtimeDuration.inHours,
-        'timestamp': DateTime.now().toIso8601String(),
-        'userId': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-        'affectedCustomers': activeCustomers.map((c) => c.id).toList(),
-      };
-      final logRef = database.firestore
-          .collection(database.getUserCollectionPath('downtime_logs'))
-          .doc();
-      batch.set(logRef, downtimeLog);
-      await batch.commit();
-      for (final customer in activeCustomers) {
-        await SubscriptionNotificationService.scheduleSingleExpirationNotification(
-            customer);
-        final message =
-            'Your subscription has been extended by ${_downtimeDuration.inHours} hours due to downtime.';
-        print('Notification sent to ${customer.name}: $message');
-      }
-      if (mounted) {
-        ref.invalidate(activeCustomersProvider);
-        ref.invalidate(expiringSubscriptionsProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Downtime applied successfully')),
-        );
-        Navigator.pop(context);
-      }
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save: $e')),
+      );
     }
   }
 }
@@ -3100,6 +3503,7 @@ class _ExpiringSubscriptionsScreenState
     extends ConsumerState<ExpiringSubscriptionsScreen> {
   final AdManager _adManager = AdManager();
   int _actionCount = 0;
+  String _filter = 'All Expiring';
   @override
   void initState() {
     super.initState();
@@ -3110,7 +3514,7 @@ class _ExpiringSubscriptionsScreenState
       size: AdSize.banner,
     );
     await _adManager.initializeInterstitialAd(
-    );
+        );
   }
   @override
   void dispose() {
@@ -3127,73 +3531,53 @@ class _ExpiringSubscriptionsScreenState
   Widget build(BuildContext context) {
     final expiringSubscriptions = ref.watch(expiringSubscriptionsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Expiring Subscriptions')),
+      appBar: AppBar(
+        title: const Text('Expiring Subscriptions'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: DropdownButton<String>(
+              value: _filter,
+              items:
+                  ['Today', 'Next 3 Days', 'All Expiring'].map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _filter = newValue;
+                  });
+                }
+              },
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
             child: expiringSubscriptions.when(
-              data:
-                  (customers) =>
-                      customers.isEmpty
-                          ? const Center(
-                            child: Text('No expiring subscriptions'),
-                          )
-                          : ListView.builder(
-                            itemCount: customers.length,
-                            itemBuilder: (context, index) {
-                              final customer = customers[index];
-                              final daysUntilExpiry =
-                                  customer.subscriptionEnd
-                                      .difference(DateTime.now())
-                                      .inDays;
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: _getExpiryColor(
-                                    daysUntilExpiry,
-                                  ),
-                                  child: Text(
-                                    daysUntilExpiry.toString(),
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                title: Text(customer.name),
-                                subtitle: Text(
-                                  '${_formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry)}\n${DateFormat('MMM dd, yyyy - hh:mm a').format(customer.subscriptionEnd)}\nPlan: ${customer.planType.name}',
-                                ),
-                                isThreeLine: true,
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.phone),
-                                      onPressed: () {
-                                        _makeCall(customer.contact);
-                                        _incrementActionAndShowAd();
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.message),
-                                      onPressed: () {
-                                        _sendMessage(
-                                          customer.contact,
-                                          context,
-                                          customer,
-                                          daysUntilExpiry,
-                                        );
-                                        _incrementActionAndShowAd();
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                onTap: () {
-                                  _showRenewalDialog(context, ref, customer);
-                                  _incrementActionAndShowAd();
-                                },
-                              );
-                            },
-                          ),
+              data: (customers) {
+                customers.sort(
+                    (a, b) => a.subscriptionEnd.compareTo(b.subscriptionEnd));
+                final filteredCustomers = _applyFilter(customers);
+                return filteredCustomers.isEmpty
+                    ? const Center(
+                        child: Text('No subscriptions expiring soon'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16.0),
+                        itemCount: filteredCustomers.length,
+                        itemBuilder: (context, index) {
+                          final customer = filteredCustomers[index];
+                          return _buildCustomerCard(customer, context);
+                        },
+                      );
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(child: Text('Error: $error')),
+              error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
           SafeArea(
@@ -3207,10 +3591,107 @@ class _ExpiringSubscriptionsScreenState
       ),
     );
   }
-  Color _getExpiryColor(int days) {
-    if (days <= 1) return Colors.red;
-    if (days <= 2) return Colors.orange;
-    return Colors.yellow.shade700;
+  List<Customer> _applyFilter(List<Customer> customers) {
+    final now = DateTime.now();
+    switch (_filter) {
+      case 'Today':
+        return customers
+            .where((c) => c.subscriptionEnd.day == now.day)
+            .toList();
+      case 'Next 3 Days':
+        return customers
+            .where((c) => c.subscriptionEnd.difference(now).inDays <= 3)
+            .toList();
+      case 'All Expiring':
+      default:
+        return customers;
+    }
+  }
+  Widget _buildCustomerCard(Customer customer, BuildContext context) {
+    final now = DateTime.now();
+    final daysLeft = customer.subscriptionEnd.difference(now).inDays;
+    final hoursLeft = customer.subscriptionEnd.difference(now).inHours % 24;
+    final isExpired = customer.subscriptionEnd.isBefore(now);
+    final expiresToday = daysLeft == 0 && !isExpired;
+    Color urgencyColor;
+    if (isExpired) {
+      urgencyColor = Colors.redAccent;
+    } else if (expiresToday) {
+      urgencyColor = Colors.orangeAccent;
+    } else {
+      urgencyColor = Colors.yellowAccent;
+    }
+    String expiryText;
+    if (isExpired) {
+      expiryText = 'Expired ${-daysLeft} day${-daysLeft != 1 ? 's' : ''} ago';
+    } else if (daysLeft > 0) {
+      expiryText = 'Expires in $daysLeft day${daysLeft != 1 ? 's' : ''}';
+    } else {
+      expiryText = 'Expires in $hoursLeft hour${hoursLeft != 1 ? 's' : ''}';
+    }
+    final daysUntilExpiry =
+        customer.subscriptionEnd.difference(DateTime.now()).inDays;
+    return Semantics(
+      label:
+          'Customer ${customer.name}, subscription expires ${DateFormat('MMM d, y').format(customer.subscriptionEnd)}, $expiryText, tap to renew',
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8.0),
+        child: ListTile(
+          title: Text(customer.name),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Plan: ${customer.planType.name}'),
+              Text(
+                expiryText,
+                style:
+                    TextStyle(color: urgencyColor, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                  '${_formatExpiryTime(customer.subscriptionEnd, daysUntilExpiry)}\n${DateFormat('MMM dd, yyyy - hh:mm a').format(customer.subscriptionEnd)}\nPlan: ${customer.planType.name}',
+                  style: TextStyle(
+                      color: urgencyColor, fontWeight: FontWeight.bold)),
+              Semantics(
+                label: 'Renew subscription for ${customer.name}',
+                child: ElevatedButton(
+                  onPressed: () {
+                    _showRenewalDialog(context, ref, customer);
+                    _incrementActionAndShowAd();
+                  },
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  child: const Text('Renew'),
+                ),
+              ),
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.phone),
+                onPressed: () {
+                  _makeCall(customer.contact);
+                  _incrementActionAndShowAd();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.message),
+                onPressed: () {
+                  _sendMessage(
+                    customer.contact,
+                    context,
+                    customer,
+                    daysUntilExpiry,
+                  );
+                  _incrementActionAndShowAd();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
   String _formatExpiryTime(DateTime subscriptionEnd, int daysUntilExpiry) {
     final now = DateTime.now();
@@ -3244,25 +3725,24 @@ class _ExpiringSubscriptionsScreenState
   ) async {
     final messageOptions = await showDialog<String>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Send Message'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.message),
-                  title: const Text('SMS'),
-                  onTap: () => Navigator.pop(context, 'sms'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.whatshot),
-                  title: const Text('WhatsApp Business'),
-                  onTap: () => Navigator.pop(context, 'whatsapp'),
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: const Text('Send Message'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.message),
+              title: const Text('SMS'),
+              onTap: () => Navigator.pop(context, 'sms'),
             ),
-          ),
+            ListTile(
+              leading: const Icon(Icons.whatshot),
+              title: const Text('WhatsApp Business'),
+              onTap: () => Navigator.pop(context, 'whatsapp'),
+            ),
+          ],
+        ),
+      ),
     );
     if (messageOptions == null) return;
     final expiryStatus = _formatExpiryTime(
@@ -3281,12 +3761,11 @@ class _ExpiringSubscriptionsScreenState
       'Best regards,\n'
       'Your WiFi Service Provider',
     );
-    final url =
-        messageOptions == 'whatsapp'
-            ? Uri.parse(
-              'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
-            )
-            : Uri.parse('sms:$contact?body=$message');
+    final url = messageOptions == 'whatsapp'
+        ? Uri.parse(
+            'https://wa.me/${contact.replaceAll(RegExp(r'[^0-9]'), '')}?text=$message',
+          )
+        : Uri.parse('sms:$contact?body=$message');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     }
@@ -3298,30 +3777,29 @@ class _ExpiringSubscriptionsScreenState
   ) async {
     return showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Renew Subscription'),
-            content: Text(
-              'Renew ${customer.name}\'s ${customer.planType.name} plan?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(
-                    context,
-                    '/payments',
-                    arguments: customer,
-                  );
-                },
-                child: const Text('RENEW'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Renew Subscription'),
+        content: Text(
+          'Renew ${customer.name}\'s ${customer.planType.name} plan?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(
+                context,
+                '/payments',
+                arguments: customer,
+              );
+            },
+            child: const Text('RENEW'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3363,6 +3841,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   final GlobalKey _retentionKey = GlobalKey();
   final GlobalKey _howToKey = GlobalKey();
   final GlobalKey _settingsKey = GlobalKey();
+  final _filterKey = GlobalKey();
+  final _quickActionsKey = GlobalKey();
+  final _notificationsKey = GlobalKey();
   @override
   void initState() {
     super.initState();
@@ -3454,6 +3935,186 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         shape: ShapeLightFocus.RRect,
         radius: 10,
       ),
+      TargetFocus(
+        identify: "filters",
+        keyTarget: _filterKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Time Filters",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RichText(
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "Filter data by different time periods\n",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: "• Today\n• This Week\n• This Month",
+                        style: TextStyle(fontSize: 14, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "stats",
+        keyTarget: _customersKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Key Metrics",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RichText(
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "Monitor your key business metrics:\n",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text:
+                            "• Active Customers\n• Expiring Subscriptions\n• Revenue\n• New Customers",
+                        style: TextStyle(fontSize: 14, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "quick_actions",
+        keyTarget: _quickActionsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Quick Actions",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  child: const Text(
+                    "Access common tasks quickly:\n"
+                    "• Add new customers\n"
+                    "• View payments\n"
+                    "• Manage subscriptions\n"
+                    "• Handle downtime\n"
+                    "• View billing cycles",
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "notifications",
+        keyTarget: _notificationsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.left,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Notifications",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "View and manage upcoming subscription reminders. "
+                  "The badge shows pending notifications.",
+                  style: TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
+      TargetFocus(
+        identify: "settings",
+        keyTarget: _settingsKey,
+        contents: [
+          TargetContent(
+            align: ContentAlign.left,
+            builder: (context, controller) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Settings & Help",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Access app settings, tutorials, and support options here.",
+                  style: TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ],
+        shape: ShapeLightFocus.RRect,
+        radius: 10,
+      ),
     ];
   }
   Future<void> _initializeAds() async {
@@ -3535,6 +4196,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
   Widget _buildFilterBar() {
     return SingleChildScrollView(
+      key: _filterKey,
       scrollDirection: Axis.horizontal,
       child: Row(
         children: ['Today', 'This Week', 'This Month']
@@ -3639,6 +4301,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
   Widget _buildQuickActions() {
     return GridView.count(
+      key: _quickActionsKey,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2,
@@ -5034,12 +5697,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 ================
 File: screens/payments_screen.dart
 ================
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/intl.dart';
-import '../database/models/payment.dart';
+import '../database/models/plan.dart';
 import '../providers/customer_provider.dart';
 import '../providers/payment_provider.dart';
 import '../services/ad_manager.dart';
@@ -5052,10 +5714,17 @@ class PaymentsScreen extends ConsumerStatefulWidget {
 }
 class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   final AdManager _adManager = AdManager();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   @override
   void initState() {
     super.initState();
     _initializeAds();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
   }
   Future<void> _initializeAds() async {
     await _adManager.initializeBannerAd(size: AdSize.mediumRectangle);
@@ -5064,6 +5733,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   @override
   void dispose() {
     _showExitInterstitial();
+    _searchController.dispose();
     _adManager.dispose();
     super.dispose();
   }
@@ -5072,8 +5742,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   }
   @override
   Widget build(BuildContext context) {
-    final paymentsAsync = ref.watch(filteredPaymentsProvider);
-    final summaryAsync = ref.watch(paymentSummaryProvider);
+    final filteredPaymentsAsync = ref.watch(filteredPaymentsProvider);
+    final paymentSummaryAsync = ref.watch(paymentSummaryProvider);
+    final selectedDateRange = ref.watch(selectedDateRangeProvider);
     return WillPopScope(
       onWillPop: () async {
         await _showExitInterstitial();
@@ -5081,50 +5752,137 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Payment History'),
+          title: const Text('Payments'),
           actions: [
             IconButton(
-              icon: const Icon(CupertinoIcons.calendar),
-              onPressed: () => _showDateRangePicker(context),
+              icon: const Icon(Icons.date_range),
+              onPressed: () => _selectDateRange(context, ref),
+              tooltip: 'Select date range',
             ),
-            IconButton(
-              icon: const Icon(CupertinoIcons.add),
-              onPressed: () => _showAddPaymentDialog(context),
-            ),
+            if (selectedDateRange != null)
+              IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  ref.read(selectedDateRangeProvider.notifier).state = null;
+                },
+                tooltip: 'Clear date range',
+              ),
           ],
         ),
         body: Column(
           children: [
-            Consumer(
-              builder: (context, ref, child) {
-                final dateRange = ref.watch(selectedDateRangeProvider);
-                if (dateRange == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Chip(
-                    label: Text(
-                      '${DateFormat('MMM d').format(dateRange.start)} - '
-                      '${DateFormat('MMM d').format(dateRange.end)}',
-                    ),
-                    onDeleted: () =>
-                        ref.read(selectedDateRangeProvider.notifier).state = null,
-                  ),
-                );
-              },
-            ),
-            _PaymentSummaryCard(summaryAsync: summaryAsync),
-            Expanded(
-              child: paymentsAsync.when(
-                data: (payments) => payments.isEmpty
-                    ? const Center(child: Text('No payments found'))
-                    : ListView.builder(
-                        itemCount: payments.length,
-                        itemBuilder: (context, index) =>
-                            _PaymentListTile(payment: payments[index]),
-                      ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stack) => Center(child: Text('Error: $error')),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  labelText: 'Search by customer name',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
               ),
+            ),
+            if (selectedDateRange != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Showing payments from ${DateFormat('MMM d, y').format(selectedDateRange.start)} to ${DateFormat('MMM d, y').format(selectedDateRange.end)}',
+                  style: const TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ),
+            Expanded(
+              child: filteredPaymentsAsync.when(
+                data: (payments) {
+                  final filteredPayments = payments.where((payment) {
+                    final customerName = payment.customerId.toLowerCase();
+                    return customerName.contains(_searchQuery);
+                  }).toList();
+                  return ListView.builder(
+                    itemCount: filteredPayments.length,
+                    itemBuilder: (context, index) {
+                      final payment = filteredPayments[index];
+                      final customerAsync =
+                          ref.watch(customerProvider(payment.customerId));
+                      return ListTile(
+                        leading: _getPlanIcon(payment.planType),
+                        title: Text(
+                          'UGX ${payment.amount.toStringAsFixed(0)} • ${payment.planType.name}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: customerAsync.when(
+                          data: (customer) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(customer?.name ?? 'Unknown Customer'),
+                                  if (customer != null && !customer.isActive)
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 8.0),
+                                      child: Text(
+                                        '(Inactive)',
+                                        style: TextStyle(
+                                            color: Colors.red, fontSize: 12),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              Text(
+                                '${payment.customerId} • ${DateFormat('MMM d, y').format(payment.paymentDate)}',
+                              ),
+                            ],
+                          ),
+                          loading: () => const Text('Loading...'),
+                          error: (_, __) => const Text('Unknown Customer'),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              payment.isConfirmed
+                                  ? Icons.check_circle
+                                  : Icons.pending,
+                              color: payment.isConfirmed
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                            ReceiptButton(payment: payment),
+                          ],
+                        ),
+                        onTap: () {
+                        },
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => Center(child: Text('Error: $error')),
+              ),
+            ),
+            paymentSummaryAsync.when(
+              data: (summary) => Card(
+                margin: const EdgeInsets.all(16.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Summary',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      _buildSummaryRow('Daily', summary['daily'] ?? 0),
+                      _buildSummaryRow('Weekly', summary['weekly'] ?? 0),
+                      _buildSummaryRow('Monthly', summary['monthly'] ?? 0),
+                      const Divider(),
+                      _buildSummaryRow('Total', summary['total'] ?? 0,
+                          isTotal: true),
+                    ],
+                  ),
+                ),
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
             ),
             Center(
               child: _adManager.getBannerAdWidget(
@@ -5133,19 +5891,57 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
             ),
           ],
         ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        floatingActionButton: FloatingActionButton.extended(
+          heroTag: 'add_payment',
+          isExtended: true,
+          onPressed: () {
+            _showAddPaymentDialog(context);
+          },
+          tooltip: 'Add Payment',
+          label: const Text('Add Payment'),
+          icon: const Icon(Icons.add),
+        ),
       ),
     );
   }
-  Future<void> _showDateRangePicker(BuildContext context) async {
-    final dateRange = await showDateRangePicker(
+  Future<void> _selectDateRange(BuildContext context, WidgetRef ref) async {
+    final initialDateRange = ref.read(selectedDateRangeProvider);
+    final picked = await showDateRangePicker(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      firstDate: DateTime(2000),
       lastDate: DateTime.now(),
-      currentDate: DateTime.now(),
+      initialDateRange: initialDateRange,
     );
-    if (dateRange != null && mounted) {
-      ref.read(selectedDateRangeProvider.notifier).state = dateRange;
+    if (picked != null) {
+      ref.read(selectedDateRangeProvider.notifier).state = picked;
     }
+  }
+  Icon _getPlanIcon(PlanType planType) {
+    switch (planType) {
+      case PlanType.daily:
+        return const Icon(Icons.calendar_today, color: Colors.blue);
+      case PlanType.weekly:
+        return const Icon(Icons.calendar_view_week, color: Colors.green);
+      case PlanType.monthly:
+        return const Icon(Icons.calendar_view_month, color: Colors.orange);
+    }
+  }
+  Widget _buildSummaryRow(String label, double amount, {bool isTotal = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
+          Text('UGX ${amount.toStringAsFixed(0)}',
+              style: TextStyle(
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
+    );
   }
   Future<void> _showAddPaymentDialog(BuildContext context) async {
     final result = await showDialog(
@@ -5155,95 +5951,6 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     if (result == true) {
       await _adManager.showInterstitialAd();
     }
-  }
-}
-class _PaymentSummaryCard extends StatelessWidget {
-  final AsyncValue<Map<String, double>> summaryAsync;
-  const _PaymentSummaryCard({required this.summaryAsync});
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.all(8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: summaryAsync.when(
-          data: (summary) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Total Revenue: UGX ${summary['total']?.toStringAsFixed(0)}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const Divider(),
-              _SummaryRow(title: 'Daily Plans:', amount: summary['daily'] ?? 0),
-              _SummaryRow(title: 'Weekly Plans:', amount: summary['weekly'] ?? 0),
-              _SummaryRow(title: 'Monthly Plans:', amount: summary['monthly'] ?? 0),
-            ],
-          ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => Center(child: Text('Error: $error')),
-        ),
-      ),
-    );
-  }
-}
-class _SummaryRow extends StatelessWidget {
-  final String title;
-  final double amount;
-  const _SummaryRow({required this.title, required this.amount});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(title), Text('UGX ${amount.toStringAsFixed(0)}')],
-      ),
-    );
-  }
-}
-class _PaymentListTile extends ConsumerWidget {
-  final Payment payment;
-  const _PaymentListTile({required this.payment});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final customerAsync = ref.watch(customerProvider(payment.customerId));
-    return ListTile(
-      leading: Icon(
-        payment.isConfirmed ? Icons.check_circle : Icons.pending,
-        color: payment.isConfirmed ? Colors.green : Colors.orange,
-      ),
-      title: customerAsync.when(
-        data: (customer) => Row(
-          children: [
-            Text(customer?.name ?? 'Unknown Customer'),
-            if (customer != null && !customer.isActive)
-              const Padding(
-                padding: EdgeInsets.only(left: 8.0),
-                child: Text(
-                  '(Inactive)',
-                  style: TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
-        loading: () => const Text('Loading...'),
-        error: (_, __) => const Text('Unknown Customer'),
-      ),
-      subtitle: Text(
-        '${payment.planType.name} - ${DateFormat('MMM d, y - h:mm a').format(payment.paymentDate)}',
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'UGX ${payment.amount.toStringAsFixed(0)}',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          ReceiptButton(payment: payment),
-        ],
-      ),
-    );
   }
 }
 
@@ -5378,93 +6085,252 @@ File: screens/retention_screen.dart
 ================
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../providers/retention_provider.dart';
-class RetentionScreen extends ConsumerWidget {
+class RetentionScreen extends ConsumerStatefulWidget {
   const RetentionScreen({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final retentionData = ref.watch(retentionProvider);
+  ConsumerState<RetentionScreen> createState() => _RetentionScreenState();
+}
+class _RetentionScreenState extends ConsumerState<RetentionScreen> {
+  DateTimeRange? _selectedRange;
+  @override
+  Widget build(BuildContext context) {
+    final retentionAsync = ref.watch(retentionProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Retention Dashboard'),
+        title: const Text('Retention Insights'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.date_range),
+            tooltip: 'Select custom date range',
+            onPressed: () => _selectDateRange(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh data',
+            onPressed: () => ref.refresh(retentionProvider),
+          ),
+        ],
       ),
-      body: retentionData.when(
-        data: (data) => SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+      body: RefreshIndicator(
+        onRefresh: () =>
+            ref.refresh(retentionProvider as Refreshable<Future<void>>),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: retentionAsync.when(
+              data: (data) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_selectedRange != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Text(
+                        'Showing data from ${DateFormat('MMM d, y').format(_selectedRange!.start)} to ${DateFormat('MMM d, y').format(_selectedRange!.end)}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                    )
+                  else
+                    Text(
+                      'Last 30 Days',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontStyle: FontStyle.italic),
+                    ),
+                  const SizedBox(height: 16),
+                  _buildMetricCard(
+                    context,
+                    title: 'Retention Rate',
+                    value: '${data['retentionRate'].toStringAsFixed(1)}%',
+                    description: 'Percentage of customers retained',
+                    color: Colors.green,
+                    semanticsLabel:
+                        'Retention rate: ${data['retentionRate'].toStringAsFixed(1)} percent',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMetricCard(
+                    context,
+                    title: 'Churn Rate',
+                    value: '${data['churnRate'].toStringAsFixed(1)}%',
+                    description: 'Percentage of customers lost',
+                    color: Colors.red,
+                    semanticsLabel:
+                        'Churn rate: ${data['churnRate'].toStringAsFixed(1)} percent',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMetricCard(
+                    context,
+                    title: 'New Customers',
+                    value: data['newCustomersLast30Days'].toString(),
+                    description: 'Customers added in the last 30 days',
+                    color: Colors.blue,
+                    semanticsLabel:
+                        'New customers in the last 30 days: ${data['newCustomersLast30Days']}',
+                  ),
+                  const SizedBox(height: 16),
+                  // Lost Customers
+                  _buildMetricCard(
+                    context,
+                    title: 'Lost Customers',
+                    value: data['lostCustomersLast30Days'].toString(),
+                    description: 'Customers lost in the last 30 days',
+                    color: Colors.orange,
+                    semanticsLabel:
+                        'Lost customers in the last 30 days: ${data['lostCustomersLast30Days']}',
+                  ),
+                  const SizedBox(height: 16),
+                  // Active/Inactive Counts
+                  _buildMetricCard(
+                    context,
+                    title: 'Active Customers',
+                    value: data['activeCount'].toString(),
+                    description: 'Currently active customers',
+                    color: Colors.teal,
+                    semanticsLabel: 'Active customers: ${data['activeCount']}',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildMetricCard(
+                    context,
+                    title: 'Inactive Customers',
+                    value: data['inactiveCount'].toString(),
+                    description: 'Currently inactive customers',
+                    color: Colors.grey,
+                    semanticsLabel:
+                        'Inactive customers: ${data['inactiveCount']}',
+                  ),
+                  const SizedBox(height: 16),
+                  // Navigation to Customer Lists
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Semantics(
+                        label: 'View active customers list',
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/customers');
+                          },
+                          child: const Text('Active List'),
+                        ),
+                      ),
+                      Semantics(
+                        label: 'View inactive customers list',
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/inactive-customers');
+                          },
+                          child: const Text('Inactive List'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              loading: () => Center(
+                child: Semantics(
+                  label: 'Loading retention data',
+                  child: const CircularProgressIndicator(),
+                ),
+              ),
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Failed to load retention data. Please try again.',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 16),
+                    Semantics(
+                      label: 'Retry loading retention data',
+                      child: ElevatedButton(
+                        onPressed: () => ref.refresh(retentionProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  Widget _buildMetricCard(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required String description,
+    required Color color,
+    required String semanticsLabel,
+  }) {
+    return Semantics(
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: Card(
+        color: Colors.white.withOpacity(0.1),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSummaryCard(
-                'Retention Rate',
-                '${data['retentionRate'].toStringAsFixed(1)}%',
-                'Percentage of customers still active',
-                Colors.green,
-              ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Churn Rate',
-                '${data['churnRate'].toStringAsFixed(1)}%',
-                'Percentage of customers lost',
-                Colors.red,
-              ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Active Customers',
-                data['activeCount'].toString(),
-                'Total active subscriptions',
-                Colors.blue,
-              ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Inactive Customers',
-                data['inactiveCount'].toString(),
-                'Total inactive subscriptions',
-                Colors.grey,
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Last 30 Days',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(color: color),
+                  ),
+                  Tooltip(
+                    message: description,
+                    child: const Icon(Icons.info_outline, size: 20),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              _buildSummaryCard(
-                'New Customers',
-                data['newCustomersLast30Days'].toString(),
-                'Customers added in last 30 days',
-                Colors.purple,
+              Text(
+                value,
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Lost Customers',
-                data['lostCustomersLast30Days'].toString(),
-                'Customers lost in last 30 days',
-                Colors.orange,
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e', style: TextStyle(color: Colors.white))),
       ),
     );
   }
-  Widget _buildSummaryCard(String title, String value, String subtitle, Color color) {
-    return Card(
-      color: Colors.white.withOpacity(0.1),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: TextStyle(fontSize: 16, color: Colors.white70)),
-            const SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 4),
-            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.white54)),
-          ],
-        ),
-      ),
+  Future<void> _selectDateRange(BuildContext context) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      initialDateRange: _selectedRange ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 30)),
+            end: DateTime.now(),
+          ),
     );
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedRange = picked;
+      });
+    }
   }
 }
 
@@ -5519,8 +6385,11 @@ class ScheduledRemindersScreen extends ConsumerWidget {
 ================
 File: screens/settings_screen.dart
 ================
+import 'dart:io';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/models/customer.dart';
 import '../database/models/plan.dart';
@@ -5538,10 +6407,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late double _monthlyPrice;
   bool _isSaving = false;
   late Map<String, dynamic> _notificationSettings;
+  bool _enableNotifications = false;
+  Future<void> _checkNotifications() async {
+    if (Platform.isAndroid) {
+      final alarmStatus = await Permission.scheduleExactAlarm.status;
+      alarmStatus.isGranted
+          ? _enableNotifications = true
+          : _enableNotifications = false;
+      if (_enableNotifications) {
+        await SubscriptionNotificationService.initialize();
+      }
+      if (!_enableNotifications) {
+        await requestExactAlarmPermission();
+      }
+      setState(() {});
+    }
+  }
+  Future<void> requestExactAlarmPermission() async {
+    if (Platform.isAndroid) {
+      final intent = AndroidIntent(
+        action: 'android.settings.REQUEST_SCHEDULE_EXACT_ALARM',
+        data: Uri.parse('package:com.truthysystems.wifi').toString(),
+      );
+      await intent.launch();
+    }
+  }
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _checkNotifications();
   }
   Future<void> _loadSettings() async {
     await SubscriptionNotificationService.loadSettings();
@@ -5600,6 +6495,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildSlider('Daily Plan (days before)', 'daysBeforeDaily'),
             _buildSlider('Weekly Plan (days before)', 'daysBeforeWeekly'),
             _buildSlider('Monthly Plan (days before)', 'daysBeforeMonthly'),
+            const Divider(height: 24),
+            CheckboxListTile(
+              title: const Text('Enable notifications'),
+              value: _enableNotifications,
+              onChanged: (value) => setState(() {
+                _enableNotifications = value ?? true;
+                if (_enableNotifications) {
+                  _checkNotifications();
+                }
+              }),
+            ),
           ],
         ),
       ),
@@ -5653,30 +6559,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
-    );
-  }
-  Widget _buildSliderWithLabel({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String unit,
-    required Function(double) onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$label: ${value.toStringAsFixed(1)} $unit'),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          label: '${value.toStringAsFixed(1)} $unit',
-          onChanged: onChanged,
-        ),
-      ],
     );
   }
   Widget _buildPriceSlider(String label, double value, double min, double max,
@@ -6792,6 +7674,7 @@ class ReceiptService {
 ================
 File: services/subscription_notification_service.dart
 ================
+import 'package:android_intent_plus/android_intent.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -6978,6 +7861,15 @@ class SubscriptionNotificationService {
           : AndroidScheduleMode.inexactAllowWhileIdle;
     }
     return AndroidScheduleMode.inexactAllowWhileIdle;
+  }
+  Future<void> requestExactAlarmPermission() async {
+    if (Platform.isAndroid) {
+      final intent = AndroidIntent(
+        action: 'android.settings.REQUEST_SCHEDULE_EXACT_ALARM',
+        data: Uri.parse('package:com.truthysystems.wifi').toString(),
+      );
+      await intent.launch();
+    }
   }
   static tz.TZDateTime _calculateNotificationTime(Customer customer) {
     final endTime = tz.TZDateTime.from(customer.subscriptionEnd, tz.local);
@@ -7388,11 +8280,15 @@ class MyApp extends ConsumerWidget {
       darkTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF1E88E5),
-          secondary: Color(0xFF4CAF50),
-          surface: Colors.black87,
+        primaryColor: Color(0xFF1A73E8),
+        scaffoldBackgroundColor: Color(0xFF121212),
+        colorScheme: ColorScheme.dark(
+          primary: Color(0xFF1A73E8),
+          secondary: Color(0xFFBB86FC),
+          surface: Color(0xFF1E1E1E),
+          onPrimary: Colors.white,
+          onSecondary: Colors.black,
+          onSurface: Colors.white,
         ),
         cardTheme: CardTheme(
           elevation: 0,
@@ -7401,17 +8297,34 @@ class MyApp extends ConsumerWidget {
           color: Colors.white.withOpacity(0.1),
         ),
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.black.withOpacity(0.2),
+          backgroundColor: Color(0xFF121212),
+          foregroundColor: Colors.white,
           elevation: 0,
-          centerTitle: false,
         ),
-        textTheme: const TextTheme(
-          headlineMedium:
-              TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-          titleLarge:
-              TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-          bodyLarge: TextStyle(color: Colors.white70),
-          bodyMedium: TextStyle(color: Colors.white70),
+        textTheme: TextTheme(
+          displayLarge: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          bodyLarge: TextStyle(
+            fontSize: 16,
+            color: Color(0xFFE0E0E0),
+          ),
+          labelLarge: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFBB86FC),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFF1A73E8),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
         ),
       ),
       themeMode: ThemeMode.dark,
@@ -7423,7 +8336,7 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   String initialRoute;
   if (kIsWeb) {
-   final uri = Uri.parse(PlatformDispatcher.instance.defaultRouteName);
+    final uri = Uri.parse(PlatformDispatcher.instance.defaultRouteName);
     if (uri.path == '/customer-share') {
       initialRoute = uri.toString();
     } else {
@@ -7443,8 +8356,11 @@ void main() async {
           .collection(dbRepo.getUserCollectionPath('customers'))
           .where('isActive', isEqualTo: true)
           .get();
-      final customers = snapshot.docs.map((doc) => Customer.fromJson(doc.id, doc.data())).toList();
-      await SubscriptionNotificationService.scheduleExpirationNotifications(customers);
+      final customers = snapshot.docs
+          .map((doc) => Customer.fromJson(doc.id, doc.data()))
+          .toList();
+      await SubscriptionNotificationService.scheduleExpirationNotifications(
+          customers);
     }
   }
   runApp(ProviderScope(child: MyApp(initialRoute: initialRoute)));

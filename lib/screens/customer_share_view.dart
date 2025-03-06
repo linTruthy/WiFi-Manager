@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 class CustomerShareView extends StatefulWidget {
   const CustomerShareView({super.key});
@@ -485,6 +487,7 @@ class _CustomerShareViewState extends State<CustomerShareView> {
   }
 
   Widget _buildReferralSection() {
+    final theme = Theme.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -507,54 +510,67 @@ class _CustomerShareViewState extends State<CustomerShareView> {
                     fontWeight: FontWeight.bold,
                   ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Share your referral code with friends and earn up to 7 days of free service for each friend who joins.',
+               style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+            ),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    "Your Referral Code",
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+            Semantics(
+              label:
+                  'Your referral code is ${customerData?['referralCode']}. Tap to copy.',
+              child: InkWell(
+                onTap: () {
+                  Clipboard.setData(
+                      ClipboardData(text: customerData?['referralCode']));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Referral code copied!')),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    customerData?['referralCode'] ?? 'N/A',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[900],
-                    ),
+                  child: Column(
+                    children: [
+                      Text(
+                        "Your Referral Code",
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        customerData?['referralCode'] ?? 'N/A',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[900],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
             _buildReferralRewards(),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                // Implement share functionality
-              },
-              icon: const Icon(Icons.share),
-              label: Text("Share & Earn",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[600],
-                  )),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+            Semantics(
+              label: 'Share referral code',
+              child: IconButton(
+                icon:  Icon(Icons.share,color: Colors.grey[600],),
+                onPressed: () {
+                  Share.share(
+                    'Join Truthy WiFi using my referral code: ${customerData?['referralCode']}',
+                  );
+                },
               ),
             ),
           ],

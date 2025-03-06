@@ -1,95 +1,268 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../providers/retention_provider.dart';
 
-class RetentionScreen extends ConsumerWidget {
+class RetentionScreen extends ConsumerStatefulWidget {
   const RetentionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final retentionData = ref.watch(retentionProvider);
+  ConsumerState<RetentionScreen> createState() => _RetentionScreenState();
+}
 
+class _RetentionScreenState extends ConsumerState<RetentionScreen> {
+  DateTimeRange? _selectedRange;
+
+  @override
+  Widget build(BuildContext context) {
+    final retentionAsync = ref.watch(retentionProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Retention Dashboard'),
+        title: const Text('Retention Insights'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.date_range),
+            tooltip: 'Select custom date range',
+            onPressed: () => _selectDateRange(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh data',
+            onPressed: () => ref.refresh(retentionProvider),
+          ),
+        ],
       ),
-      body: retentionData.when(
-        data: (data) => SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSummaryCard(
-                'Retention Rate',
-                '${data['retentionRate'].toStringAsFixed(1)}%',
-                'Percentage of customers still active',
-                Colors.green,
+      body: RefreshIndicator(
+        onRefresh: () =>
+            ref.refresh(retentionProvider as Refreshable<Future<void>>),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: retentionAsync.when(
+              data: (data) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Date Range Info
+                  if (_selectedRange != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Text(
+                        'Showing data from ${DateFormat('MMM d, y').format(_selectedRange!.start)} to ${DateFormat('MMM d, y').format(_selectedRange!.end)}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                    )
+                  else
+                    Text(
+                      'Last 30 Days',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontStyle: FontStyle.italic),
+                    ),
+                  const SizedBox(height: 16),
+
+                  // Retention Rate
+                  _buildMetricCard(
+                    context,
+                    title: 'Retention Rate',
+                    value: '${data['retentionRate'].toStringAsFixed(1)}%',
+                    description: 'Percentage of customers retained',
+                    color: Colors.green,
+                    semanticsLabel:
+                        'Retention rate: ${data['retentionRate'].toStringAsFixed(1)} percent',
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Churn Rate
+                  _buildMetricCard(
+                    context,
+                    title: 'Churn Rate',
+                    value: '${data['churnRate'].toStringAsFixed(1)}%',
+                    description: 'Percentage of customers lost',
+                    color: Colors.red,
+                    semanticsLabel:
+                        'Churn rate: ${data['churnRate'].toStringAsFixed(1)} percent',
+                  ),
+                  const SizedBox(height: 16),
+
+                  // New Customers
+                  _buildMetricCard(
+                    context,
+                    title: 'New Customers',
+                    value: data['newCustomersLast30Days'].toString(),
+                    description: 'Customers added in the last 30 days',
+                    color: Colors.blue,
+                    semanticsLabel:
+                        'New customers in the last 30 days: ${data['newCustomersLast30Days']}',
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Lost Customers
+                  _buildMetricCard(
+                    context,
+                    title: 'Lost Customers',
+                    value: data['lostCustomersLast30Days'].toString(),
+                    description: 'Customers lost in the last 30 days',
+                    color: Colors.orange,
+                    semanticsLabel:
+                        'Lost customers in the last 30 days: ${data['lostCustomersLast30Days']}',
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Active/Inactive Counts
+                  _buildMetricCard(
+                    context,
+                    title: 'Active Customers',
+                    value: data['activeCount'].toString(),
+                    description: 'Currently active customers',
+                    color: Colors.teal,
+                    semanticsLabel: 'Active customers: ${data['activeCount']}',
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildMetricCard(
+                    context,
+                    title: 'Inactive Customers',
+                    value: data['inactiveCount'].toString(),
+                    description: 'Currently inactive customers',
+                    color: Colors.grey,
+                    semanticsLabel:
+                        'Inactive customers: ${data['inactiveCount']}',
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Navigation to Customer Lists
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Semantics(
+                        label: 'View active customers list',
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/customers');
+                          },
+                          child: const Text('Active List'),
+                        ),
+                      ),
+                      Semantics(
+                        label: 'View inactive customers list',
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/inactive-customers');
+                          },
+                          child: const Text('Inactive List'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Churn Rate',
-                '${data['churnRate'].toStringAsFixed(1)}%',
-                'Percentage of customers lost',
-                Colors.red,
+              loading: () => Center(
+                child: Semantics(
+                  label: 'Loading retention data',
+                  child: const CircularProgressIndicator(),
+                ),
               ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Active Customers',
-                data['activeCount'].toString(),
-                'Total active subscriptions',
-                Colors.blue,
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Failed to load retention data. Please try again.',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 16),
+                    Semantics(
+                      label: 'Retry loading retention data',
+                      child: ElevatedButton(
+                        onPressed: () => ref.refresh(retentionProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Inactive Customers',
-                data['inactiveCount'].toString(),
-                'Total inactive subscriptions',
-                Colors.grey,
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Last 30 Days',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 8),
-              _buildSummaryCard(
-                'New Customers',
-                data['newCustomersLast30Days'].toString(),
-                'Customers added in last 30 days',
-                Colors.purple,
-              ),
-              const SizedBox(height: 16),
-              _buildSummaryCard(
-                'Lost Customers',
-                data['lostCustomersLast30Days'].toString(),
-                'Customers lost in last 30 days',
-                Colors.orange,
-              ),
-            ],
+            ),
           ),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e', style: TextStyle(color: Colors.white))),
       ),
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, String subtitle, Color color) {
-    return Card(
-      color: Colors.white.withOpacity(0.1),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: TextStyle(fontSize: 16, color: Colors.white70)),
-            const SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 4),
-            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.white54)),
-          ],
+  Widget _buildMetricCard(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required String description,
+    required Color color,
+    required String semanticsLabel,
+  }) {
+    return Semantics(
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: Card(
+        color: Colors.white.withOpacity(0.1),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(color: color),
+                  ),
+                  Tooltip(
+                    message: description,
+                    child: const Icon(Icons.info_outline, size: 20),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _selectDateRange(BuildContext context) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      initialDateRange: _selectedRange ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 30)),
+            end: DateTime.now(),
+          ),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedRange = picked;
+      });
+      // TODO: Update retentionProvider to filter by selected range if implemented
+    }
   }
 }

@@ -281,7 +281,7 @@ class Customer {
   static const int _defaultLength = 12;
 
   /// Minimum allowed password length
-  static const int _minLengthx = 8;
+  static const int _minLengthx = 6;
 
   /// Maximum allowed password length for practical purposes
   static const int _maxLength = 128;
