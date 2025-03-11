@@ -190,7 +190,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 24),
             _buildSaveButton(),
             const SizedBox(height: 24),
-            IconButton(
+            TextButton.icon(
+              label: Text('About'),
               icon: const Icon(Icons.info),
               onPressed: () => Navigator.pushNamed(context, '/about'),
             ),

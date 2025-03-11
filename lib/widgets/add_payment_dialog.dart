@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -284,7 +285,7 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
           customer.toJson(),
         );
         await batch.commit();
-
+print('to show ffffffffffffffffffffff');
         if (!mounted) return;
 
         Navigator.pop(context, true); // Return true to indicate success
@@ -304,32 +305,14 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
         // Schedule notification for the updated subscription
         await SubscriptionNotificationService
             .scheduleSingleExpirationNotification(customer);
-
+print('to show rrrrrrrrrrrrr');
         // Show WiFi credentials dialog
-        if (mounted && (previousPayments.length <= 1 || !customer.isActive)) {
+        if (mounted) {
+          //&& (previousPayments.length <= 1 || !customer.isActive)) {
+          print('to show xxxxxxxxxxx');
           showDialog(
             context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('WiFi Credentials'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                      'Use the following Credentials to setup Hotspot for ${customer.name}'),
-                  const SizedBox(height: 16),
-                  SelectableText('WiFi Name: ${customer.wifiName}'),
-                  const SizedBox(height: 8),
-                  SelectableText('Password: ${customer.currentPassword}'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
+            builder: (context) => _buildWiFiCredentialsDialog(customer),
           );
         }
         if (mounted) {
@@ -349,6 +332,153 @@ class _AddPaymentDialogState extends ConsumerState<AddPaymentDialog> {
         }
       }
     }
+  }
+
+  Widget _buildWiFiCredentialsDialog(Customer customer) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: const Color(0xFF1E1E1E), // Dark theme surface color
+      title: Semantics(
+        label: 'WiFi Credentials Dialog Title',
+        child: const Text(
+          'WiFi Access Setup',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Introductory Message
+            Semantics(
+              label: 'Instruction Header',
+              child: Text(
+                'Set up WiFi access for ${customer.name} with these credentials:',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white70,
+                    ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // WiFi Credentials Section
+            _buildCredentialField(
+              label: 'WiFi Name',
+              value: customer.wifiName,
+              semanticsLabel: 'WiFi Name for ${customer.name}',
+            ),
+            const SizedBox(height: 12),
+            _buildCredentialField(
+              label: 'Password',
+              value: customer.currentPassword,
+              semanticsLabel: 'WiFi Password for ${customer.name}',
+            ),
+            const SizedBox(height: 20),
+
+            // Instructions Section
+            Semantics(
+              label: 'Setup Instructions',
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'How to Add to Your Router:',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '1. Log in to your router (usually via 192.168.1.1 or 192.168.0.1 in a browser).\n'
+                      '2. Go to "Wireless" or "WiFi Settings".\n'
+                      '3. Add a new SSID with the WiFi Name above.\n'
+                      '4. Set the Password as shown.\n'
+                      '5. Save and reboot the router if needed.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white70,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Semantics(
+          label: 'Close WiFi Credentials Dialog',
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Color(0xFF1A73E8)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCredentialField({
+    required String label,
+    required String value,
+    required String semanticsLabel,
+  }) {
+    return Semantics(
+      label: semanticsLabel,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(
+                  value,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Colors.white,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Semantics(
+            label: 'Copy $label',
+            child: IconButton(
+              icon: const Icon(Icons.copy, color: Color(0xFF1A73E8)),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: value));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$label copied to clipboard')),
+                );
+              },
+              tooltip: 'Copy $label',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<List<Plan>> getPlans() async {
