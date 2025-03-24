@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../database/models/customer.dart';
-import '../providers/customer_provider.dart';
-import '../providers/database_provider.dart';
-import '../services/subscription_notification_service.dart';
+import '../../database/models/customer.dart';
+import '../../providers/customer_provider.dart';
+import '../../providers/database_provider.dart';
+import '../../services/subscription_notification_service.dart';
 
 class InactiveCustomersScreen extends ConsumerWidget {
   const InactiveCustomersScreen({super.key});

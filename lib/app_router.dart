@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'database/models/customer.dart';
 import 'providers/database_provider.dart';
-import 'screens/add_customer_screen.dart';
-import 'screens/customer_detail_screen.dart';
-import 'screens/customers_screen.dart';
+import 'screens/customers/add_customer_screen.dart';
+import 'screens/customers/customer_detail_screen.dart';
+import 'screens/customers/customers_screen.dart';
 import 'screens/downtime_input_screen.dart';
-import 'screens/edit_customer_screen.dart';
+import 'screens/customers/edit_customer_screen.dart';
 import 'screens/expiring_subscriptions_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/inactive_customers_screen.dart';
-import 'screens/login_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'screens/customers/inactive_customers_screen.dart';
+import 'screens/auth/login_screen.dart';
 import 'screens/payments_screen.dart';
 
 class AppRouter {

@@ -1,0 +1,90 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:truthy_wifi_manager/app_router.dart';
+import 'package:truthy_wifi_manager/main.dart';
+
+class MyApp extends ConsumerWidget {
+  final String? initialRoute;
+
+  const MyApp({super.key, this.initialRoute});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MaterialApp(
+      navigatorKey: navigatorKey,
+      onGenerateRoute: (settings) => AppRouter.onGenerateRoute(settings, ref),
+      routes: AppRouter.routes,
+      title: 'Truthy WiFi Manager',
+      initialRoute: initialRoute,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF1E88E5),
+          secondary: Color(0xFF4CAF50),
+          surface: Colors.black87,
+        ),
+        cardTheme: CardTheme(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          color: Colors.white.withOpacity(0.1),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.black.withOpacity(0.2),
+          elevation: 0,
+          centerTitle: false,
+        ),
+        textTheme: const TextTheme(
+          headlineMedium: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          titleLarge: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          bodyLarge: TextStyle(color: Colors.white70),
+          bodyMedium: TextStyle(color: Colors.white70),
+        ),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF1E88E5),
+          secondary: Color(0xFF4CAF50),
+          surface: Colors.black87,
+        ),
+        cardTheme: CardTheme(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          color: Colors.white.withOpacity(0.1),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.black.withOpacity(0.2),
+          elevation: 0,
+          centerTitle: false,
+        ),
+        textTheme: const TextTheme(
+          headlineMedium: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          titleLarge: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          bodyLarge: TextStyle(color: Colors.white70),
+          bodyMedium: TextStyle(color: Colors.white70),
+        ),
+      ),
+      themeMode: ThemeMode.dark,
+    );
+  }
+}

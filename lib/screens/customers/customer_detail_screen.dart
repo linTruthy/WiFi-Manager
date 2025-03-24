@@ -4,11 +4,11 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../database/models/customer.dart';
-import '../services/ad_manager.dart';
-import '../widgets/add_payment_dialog.dart';
+import '../../database/models/customer.dart';
+import '../../services/ad_manager.dart';
+import '../../widgets/add_payment_dialog.dart';
 import 'edit_customer_screen.dart';
-import 'referral_stats_screen.dart';
+import '../referral_stats_screen.dart';
 
 class CustomerDetailScreen extends ConsumerStatefulWidget {
   final Customer customer;
@@ -34,12 +34,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     // Initialize two banner ads for different positions
     await _adManager.initializeBannerAd(
       size: AdSize.banner,
-      adUnitId: 'your_banner_ad_unit_id_here',
+      adUnitId: '',
     );
 
     // Initialize interstitial ad
     await _adManager.initializeInterstitialAd(
-      adUnitId: 'your_interstitial_ad_unit_id_here',
+      adUnitId: '',
     );
 
     // Show initial interstitial if customer subscription is expired

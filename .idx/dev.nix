@@ -21,7 +21,7 @@
           "--web-port"
           "$PORT"
         ];
-        manager = "flutter";
+        manager = "flutter"; 
       };
       android = {
         command = [

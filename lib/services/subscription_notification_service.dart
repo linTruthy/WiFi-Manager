@@ -13,7 +13,7 @@ import '../database/models/plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
-import '../screens/customer_detail_screen.dart';
+import '../screens/customers/customer_detail_screen.dart';
 
 class SubscriptionNotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =

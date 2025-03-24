@@ -6,13 +6,13 @@ import 'package:isar/isar.dart';
 import 'package:truthy_wifi_manager/providers/customer_provider.dart' show customerProvider;
 
 
-import '../database/models/customer.dart';
-import '../database/models/plan.dart';
-import '../database/models/referral_stats.dart';
-import '../providers/database_provider.dart';
-import '../providers/notification_schedule_provider.dart';
-import '../providers/subscription_provider.dart';
-import '../providers/syncing_provider.dart';
+import '../../database/models/customer.dart';
+import '../../database/models/plan.dart';
+import '../../database/models/referral_stats.dart';
+import '../../providers/database_provider.dart';
+import '../../providers/notification_schedule_provider.dart';
+import '../../providers/subscription_provider.dart';
+import '../../providers/syncing_provider.dart';
 
 class AddCustomerScreen extends ConsumerStatefulWidget {
   const AddCustomerScreen({super.key});
