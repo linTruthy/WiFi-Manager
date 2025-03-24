@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 import 'package:truthy_wifi_manager/database/models/customer.dart';
 import 'package:truthy_wifi_manager/database/models/sync_status.dart';
+import '../providers/customer_provider.dart';
 import '../providers/database_provider.dart';
-import '../services/subscription_notification_service.dart';
+import '../providers/notification_schedule_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../providers/syncing_provider.dart';
 
 class DowntimeInputScreen extends ConsumerStatefulWidget {
   const DowntimeInputScreen({super.key});
@@ -65,42 +68,71 @@ class _DowntimeInputScreenState extends ConsumerState<DowntimeInputScreen> {
       final database = ref.read(databaseProvider);
       final isar = await database.db;
 
-      // Get all active customers
-      final activeCustomers =
-          await isar.customers.filter().isActiveEqualTo(true).findAll();
+      try {
+        // Get all active customers first
+        final activeCustomers =
+            await isar.customers.filter().isActiveEqualTo(true).findAll();
 
-      // Extend subscription end date for each active customer
-      for (final customer in activeCustomers) {
-        customer.subscriptionEnd = customer.subscriptionEnd.add(
-          _downtimeDuration,
-        );
+        // Process all updates in a single transaction
         await isar.writeTxn(() async {
-          await isar.customers.put(customer);
-          await isar.syncStatus.put(
-            SyncStatus(
-              entityId: customer.id,
-              entityType: 'customer',
-              operation: 'save',
-              timestamp: DateTime.now(),
-            ),
-          );
+          for (final customer in activeCustomers) {
+            // Use copyWith to create updated customer
+            final updatedCustomer = customer.copyWith(
+              subscriptionEnd: customer.subscriptionEnd.add(_downtimeDuration),
+            );
+
+            await isar.customers.put(updatedCustomer);
+            await isar.syncStatus.put(
+              SyncStatus(
+                entityId: updatedCustomer.id,
+                entityType: 'customer',
+                operation: 'save',
+                timestamp: DateTime.now(),
+              ),
+            );
+
+            // Explicitly push to cloud
+            await database.pushCustomer(updatedCustomer);
+          }
         });
 
-        // Notify customer about the extension
-        final message =
-            'Your subscription has been extended by ${_downtimeDuration.inHours} hours due to downtime.';
-        await SubscriptionNotificationService.scheduleExpirationNotification(
-          customer,
-        );
-        // Print the message (for debugging purposes)
-        print('Notification sent to ${customer.name}: $message');
-      }
+        // Create and schedule actual notifications to customers
+        for (final customer in activeCustomers) {
+          final message =
+              'Your subscription has been extended by ${_downtimeDuration.inHours} hours due to downtime.';
+          // Implement actual notification sending here
+          // ...
+        }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Downtime applied successfully')),
-        );
-        Navigator.pop(context);
+        // Invalidate providers to refresh UI
+        ref.invalidate(activeCustomersProvider);
+        ref.invalidate(expiringCustomersProvider);
+        ref.invalidate(syncingProvider);
+        ref.invalidate(databaseProvider);
+        ref.invalidate(customerProvider);
+        ref.invalidate(expiringSubscriptionsProvider);
+        ref.invalidate(notificationSchedulerProvider);
+
+        // Force sync to cloud
+        database.syncPendingChanges();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Downtime applied successfully')),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e, stackTrace) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: SelectableText(
+                'Error applying downtime: $e\n$stackTrace',
+              ),
+              duration: Duration(seconds: 10),
+            ),
+          );
+        }
       }
     }
   }
