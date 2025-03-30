@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../database/models/customer.dart';
-import '../database/models/plan.dart';
-import '../providers/customer_provider.dart';
-import '../providers/database_provider.dart';
+import '../../database/models/customer.dart';
+import '../../database/models/plan.dart';
+import '../../providers/customer_provider.dart';
+import '../../providers/database_provider.dart';
 
 class EditCustomerScreen extends ConsumerStatefulWidget {
   final Customer customer;

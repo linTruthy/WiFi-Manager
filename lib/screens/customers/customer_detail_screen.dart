@@ -4,12 +4,12 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../database/models/customer.dart';
-import '../services/ad_manager.dart';
-import '../utils.dart';
-import '../widgets/add_payment_dialog.dart';
+import '../../database/models/customer.dart';
+import '../../services/ad_manager.dart';
+import '../../utils.dart';
+import '../../widgets/add_payment_dialog.dart';
 import 'edit_customer_screen.dart';
-import 'referral_stats_screen.dart';
+import '../referral_stats_screen.dart';
 
 class CustomerDetailScreen extends ConsumerStatefulWidget {
   final Customer customer;

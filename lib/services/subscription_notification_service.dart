@@ -1,4 +1,3 @@
-
 import 'package:android_intent_plus/android_intent.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -255,13 +254,14 @@ class SubscriptionNotificationService {
 
   static Future<bool> _isNotificationScheduled(String customerId) async {
     final prefs = await SharedPreferences.getInstance();
+    // Use _detailedNotificationsKey instead of _scheduledNotificationsKey
     final notifications =
-        prefs.getString(_scheduledNotificationsKey)?.let(json.decode) ??
+        prefs.getString(_detailedNotificationsKey)?.let(json.decode) ??
             <String, dynamic>{};
     final scheduled = notifications[customerId];
     if (scheduled == null) return false;
-
-    final time = DateTime.parse(scheduled['time']);
+    // Check for 'notificationTime' instead of 'time'
+    final time = DateTime.parse(scheduled['notificationTime']);
     return time.isAfter(DateTime.now());
   }
 
@@ -287,33 +287,70 @@ class SubscriptionNotificationService {
     await scheduleExpirationNotifications([customer]);
   }
 
+//   static Future<List<Map<String, dynamic>>> getScheduledNotifications() async {
+//     _logger.i('Fetching scheduled notifications'); // Log method start
+//     final prefs = await SharedPreferences.getInstance();
+//     final notificationsString = prefs.getString(_detailedNotificationsKey);
+
+//     if (notificationsString == null) {
+//       _logger.w(
+//           'No notifications found in SharedPreferences'); // Log if no data exists
+//       return [];
+//     }
+
+//     try {
+//       final notifications =
+//           json.decode(notificationsString) as Map<String, dynamic>;
+//       final now = DateTime.now();
+
+//       // Filter out expired notifications
+//       final activeNotifications = notifications.entries
+//           .where((entry) =>
+//               DateTime.parse(entry.value['notificationTime']).isAfter(now))
+//           .map((entry) => entry.value)
+//           .toList();
+
+//       _logger.i(
+//           'Found ${activeNotifications.length} active notifications'); // Log count of active notifications
+
+//       // Parse and return the active notifications
+//       return activeNotifications
+//           .map((notification) => {
+//                 'customerId': notification['customerId'],
+//                 'customerName': notification['customerName'],
+//                 'planType': notification['planType'],
+//                 'subscriptionEnd':
+//                     DateTime.parse(notification['subscriptionEnd']),
+//                 'notificationTime':
+//                     DateTime.parse(notification['notificationTime']),
+//                 'message': notification['message'],
+//                 'status': notification['status'],
+//               })
+//           .toList();
+//     } catch (e) {
+//       _logger.e('Error decoding notifications: $e'); // Log any errors
+//       return [];
+//     }
+//   }
+// }
   static Future<List<Map<String, dynamic>>> getScheduledNotifications() async {
-    _logger.i('Fetching scheduled notifications'); // Log method start
+    _logger.i('Fetching scheduled notifications');
     final prefs = await SharedPreferences.getInstance();
     final notificationsString = prefs.getString(_detailedNotificationsKey);
-
     if (notificationsString == null) {
-      _logger.w(
-          'No notifications found in SharedPreferences'); // Log if no data exists
+      _logger.w('No notifications found in SharedPreferences');
       return [];
     }
-
     try {
       final notifications =
           json.decode(notificationsString) as Map<String, dynamic>;
       final now = DateTime.now();
-
-      // Filter out expired notifications
       final activeNotifications = notifications.entries
           .where((entry) =>
               DateTime.parse(entry.value['notificationTime']).isAfter(now))
           .map((entry) => entry.value)
           .toList();
-
-      _logger.i(
-          'Found ${activeNotifications.length} active notifications'); // Log count of active notifications
-
-      // Parse and return the active notifications
+      _logger.i('Found ${activeNotifications.length} active notifications');
       return activeNotifications
           .map((notification) => {
                 'customerId': notification['customerId'],
@@ -328,7 +365,7 @@ class SubscriptionNotificationService {
               })
           .toList();
     } catch (e) {
-      _logger.e('Error decoding notifications: $e'); // Log any errors
+      _logger.e('Error decoding notifications: $e');
       return [];
     }
   }
